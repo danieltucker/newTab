@@ -9,9 +9,31 @@
             body {
                 background: #3f3f3f;
             }
+            #shortcutContainer .shortcutFolder {
+                width: 120px;
+                height: 120px;
+                display: inline-block;
+                border-radius: 5px;
+                padding: 16px;
+                margin: 15px;
+                border: 1px dashed #555;
+            }
+            .shortcutFolder .shortcut {
+                background: red;
+                border-radius: 100%;
+                height: 120px;
+                width: 120px;
+            }
         </style>
     </head>
     <body>
-        <p>Hello World</p>
+        <div id="shortcutContainer">
+            <div class="shortcutFolder">
+                <div class="shortcut"></div>
+            </div>
+            <div class="shortcutFolder">
+                <div class="shortcut"></div>
+            </div>
+        </div>
     </body>
 </html>
