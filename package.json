@@ -1,0 +1,27 @@
+{
+  "name": "newTab-app",
+  "version": "1.0.0",
+  "description": "New Browser Tab Extension",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danieltucker/newTab"
+  },
+  "keywords": [
+    "new tab"
+  ],
+  "author": "dtucker",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.17.2",
+    "express": "^4.15.3"
+  },
+  "devDependencies": {
+    "grunt": "^1.0.1",
+    "mocha": "^3.4.2"
+  }
+}
