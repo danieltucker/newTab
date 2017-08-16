@@ -1,0 +1,21 @@
+0 info it worked if it ends with ok
+1 verbose cli [ 'C:\\Program Files\\nodejs\\node.exe',
+1 verbose cli   'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',
+1 verbose cli   'init' ]
+2 info using npm@3.10.10
+3 info using node@v6.11.2
+4 verbose stack Error: EEXIST: file already exists, mkdir 'C:\Onedrive\Projects\newTab'
+4 verbose stack     at Error (native)
+5 verbose cwd C:\Onedrive\Projects\newTab
+6 error Windows_NT 10.0.16257
+7 error argv "C:\\Program Files\\nodejs\\node.exe" "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js" "init"
+8 error node v6.11.2
+9 error npm  v3.10.10
+10 error path C:\Onedrive\Projects\newTab
+11 error code EEXIST
+12 error errno -4075
+13 error syscall mkdir
+14 error EEXIST: file already exists, mkdir 'C:\Onedrive\Projects\newTab'
+15 error File exists: C:\Onedrive\Projects\newTab
+16 error Move it away, and try again.
+17 verbose exit [ -4075, true ]
