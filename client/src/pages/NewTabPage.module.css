@@ -1,0 +1,62 @@
+.page {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+}
+
+.header {
+  animation: rise 0.48s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.searchbar {
+  animation: rise 0.48s 0.06s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.bodyGrid {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: 212px 1fr 290px;
+  gap: 26px;
+  align-items: start;
+  animation: rise 0.48s 0.12s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.userBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.username {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.logoutBtn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.logoutBtn:hover {
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .bodyGrid {
+    grid-template-columns: 1fr;
+  }
+}

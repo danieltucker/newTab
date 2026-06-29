@@ -1,0 +1,155 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  animation: fade 0.3s ease;
+}
+
+.card {
+  width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 36px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  animation: pop 0.28s ease;
+}
+
+.logo {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px var(--shadow);
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 12px 14px;
+  min-height: 46px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.input::placeholder {
+  color: var(--muted);
+}
+
+.error {
+  font-size: 13px;
+  color: #FF4500;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 69, 0, 0.08);
+  border-radius: 8px;
+}
+
+.submit {
+  width: 100%;
+  min-height: 46px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 11px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.12s;
+  margin-top: 4px;
+}
+
+.submit:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 16px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.submit:active {
+  transform: scale(0.97);
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.switchHint {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.switchLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

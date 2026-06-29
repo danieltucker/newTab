@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String            @id @default(cuid())
+  username      String            @unique
+  passwordHash  String
+  createdAt     DateTime          @default(now())
+  folders       Folder[]
+  bookmarks     Bookmark[]
+  readingList   ReadingListItem[]
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Folder {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String
+  position  Int
+  bookmarks Bookmark[]
+  createdAt DateTime   @default(now())
+}
+
+model Bookmark {
+  id         String   @id @default(cuid())
+  folderId   String
+  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain     String
+  name       String
+  faviconUrl String
+  color      String
+  position   Int
+  createdAt  DateTime @default(now())
+}
+
+model ReadingListItem {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url      String
+  title    String
+  source   String
+  readTime String
+  tag      String
+  savedAt  DateTime @default(now())
+}

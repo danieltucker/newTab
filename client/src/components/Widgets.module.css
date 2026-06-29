@@ -1,0 +1,76 @@
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+}
+
+.cardLabel {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardLabel svg {
+  flex-shrink: 0;
+}
+
+.temp {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 38px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+}
+
+.weatherDesc {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.weatherSub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.noteLine {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.noteLine.muted {
+  color: var(--muted);
+}
+
+.addWidget {
+  width: 100%;
+  min-height: 46px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.addWidget:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

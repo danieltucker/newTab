@@ -1,0 +1,114 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  animation: fade 0.2s ease;
+}
+
+.card {
+  width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 26px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  animation: pop 0.28s ease;
+}
+
+.title {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 12px 14px;
+  min-height: 46px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  margin-bottom: 16px;
+  transition: border-color 0.15s;
+}
+
+.input:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--muted); }
+
+.colorRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.colorSwatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.1s;
+}
+
+.colorSwatch:hover { transform: scale(1.1); }
+.colorSwatch.selected { border-color: white; box-shadow: 0 0 0 2px var(--accent); }
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancelBtn {
+  padding: 0 18px;
+  min-height: 44px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cancelBtn:hover { background: var(--surface); }
+
+.createBtn {
+  padding: 0 18px;
+  min-height: 44px;
+  background: var(--accent);
+  border: none;
+  border-radius: 11px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.createBtn:hover { filter: brightness(1.08); }
+.createBtn:disabled { opacity: 0.5; cursor: not-allowed; }

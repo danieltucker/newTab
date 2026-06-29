@@ -1,0 +1,239 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  animation: fade 0.2s ease;
+}
+
+.card {
+  width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 26px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  animation: pop 0.28s ease;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.title {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.closeBtn:hover {
+  color: var(--text);
+}
+
+.preview {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 14px;
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.previewChip {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.previewMonogram {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.previewFavicon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  position: absolute;
+  z-index: 1;
+}
+
+.previewText {}
+
+.previewName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.previewDomain {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.previewEmpty {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.urlInput {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 12px 14px;
+  min-height: 46px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.urlInput:focus {
+  border-color: var(--accent);
+}
+
+.urlInput::placeholder {
+  color: var(--muted);
+}
+
+.helper {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.folderChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.chip.selected {
+  color: var(--text);
+}
+
+.colorDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cancelBtn {
+  padding: 0 18px;
+  min-height: 44px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.12s;
+}
+
+.cancelBtn:hover {
+  background: var(--surface);
+}
+
+.cancelBtn:active {
+  transform: scale(0.97);
+}
+
+.addBtn {
+  padding: 0 18px;
+  min-height: 44px;
+  background: var(--accent);
+  border: none;
+  border-radius: 11px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+
+.addBtn:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 16px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.addBtn:active {
+  transform: scale(0.97);
+}
+
+.addBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}

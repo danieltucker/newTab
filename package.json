@@ -1,0 +1,25 @@
+{
+  "name": "newtab-root",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "build": "npm run build --workspace=server && npm run build --workspace=client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "sharp@0.33.5": true,
+    "esbuild@0.21.5": true,
+    "prisma@7.8.0": true,
+    "@prisma/engines@7.8.0": true
+  },
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

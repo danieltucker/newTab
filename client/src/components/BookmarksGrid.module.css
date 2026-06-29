@@ -1,0 +1,26 @@
+.section {}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.folderTitle {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.siteCount {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
