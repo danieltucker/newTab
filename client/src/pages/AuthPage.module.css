@@ -153,3 +153,13 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* 6-digit TOTP code input */
+.totpInput {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-align: center;
+  padding: 14px 16px;
+}

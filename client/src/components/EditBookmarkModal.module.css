@@ -1,0 +1,69 @@
+.nameInput {
+  font-family: 'Hanken Grotesk', sans-serif !important;
+}
+
+.actionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.deleteBtn {
+  padding: 0 14px;
+  min-height: 44px;
+  background: transparent;
+  border: 1px solid color-mix(in oklab, #FF4500 40%, transparent);
+  border-radius: 11px;
+  color: #FF4500;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.deleteBtn:hover {
+  background: color-mix(in oklab, #FF4500 10%, transparent);
+}
+
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.confirmText {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.confirmYes {
+  padding: 0 12px;
+  min-height: 36px;
+  background: #FF4500;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirmYes:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.confirmNo {
+  padding: 0 12px;
+  min-height: 36px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}

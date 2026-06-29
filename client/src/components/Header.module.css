@@ -35,24 +35,3 @@
   line-height: 1;
 }
 
-.themeToggle {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 9px 17px;
-  min-height: 40px;
-  color: var(--text);
-  font-family: 'Hanken Grotesk', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.12s;
-}
-
-.themeToggle:hover {
-  background: var(--surface);
-}
-
-.themeToggle:active {
-  transform: scale(0.95);
-}

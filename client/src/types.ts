@@ -13,6 +13,10 @@ export interface Bookmark {
   faviconUrl: string;
   color: string;
   position: number;
+  feedUrl?: string | null;
+  feedCheckedAt?: string | null;
+  feedLatestAt?: string | null;
+  lastVisitedAt?: string | null;
 }
 
 export interface ReadingListItem {
@@ -22,6 +26,8 @@ export interface ReadingListItem {
   source: string;
   readTime: string;
   tag: string;
+  notes: string;
+  archived: boolean;
   savedAt: string;
 }
 

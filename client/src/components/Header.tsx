@@ -1,11 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './Header.module.css';
 
-interface Props {
-  theme: 'dark' | 'light';
-  onToggleTheme: () => void;
-}
-
 function getGreeting(): string {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
@@ -21,7 +16,7 @@ function formatTime(): string {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-export default function Header({ theme, onToggleTheme }: Props) {
+export default function Header() {
   const [time, setTime] = useState(formatTime);
   const [greeting, setGreeting] = useState(getGreeting);
   const [date, setDate] = useState(formatDate);
@@ -44,9 +39,6 @@ export default function Header({ theme, onToggleTheme }: Props) {
       </div>
       <div className={styles.right}>
         <div className={styles.clock}>{time}</div>
-        <button className={styles.themeToggle} onClick={onToggleTheme}>
-          {theme === 'dark' ? 'Light' : 'Dark'}
-        </button>
       </div>
     </header>
   );

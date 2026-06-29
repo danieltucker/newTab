@@ -1,9 +1,23 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>New Tab</title>
+    <!-- Apply theme before first paint — prevents flash on both dark↔light toggle and page load -->
+    <script>
+      (function () {
+        var t = localStorage.getItem('theme') || 'dark';
+        if (t === 'auto') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+    <!-- Instant background so the body isn't white before the CSS bundle loads -->
+    <style>
+      html[data-theme="dark"]  { background: #0e0e11; }
+      html[data-theme="light"] { background: #f5f5f7; }
+      body { margin: 0; }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />

@@ -1,4 +1,3 @@
-import { useRef, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -26,9 +25,14 @@ interface Props {
   tileRefs: React.MutableRefObject<Record<string, HTMLElement | null>>;
   onAddLink: () => void;
   onReorder: (reordered: Bookmark[]) => void;
+  onEditBookmark: (b: Bookmark) => void;
+  onDeleteBookmark: (id: string) => void;
+  onVisit: (id: string) => void;
 }
 
-export default function BookmarksGrid({ folder, bookmarks, tileRefs, onAddLink, onReorder }: Props) {
+export default function BookmarksGrid({
+  folder, bookmarks, tileRefs, onAddLink, onReorder, onEditBookmark, onDeleteBookmark, onVisit,
+}: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -57,7 +61,7 @@ export default function BookmarksGrid({ folder, bookmarks, tileRefs, onAddLink, 
     <div className={styles.section}>
       <div className={styles.titleRow}>
         <span className={styles.folderTitle}>{folder.name}</span>
-        <span className={styles.siteCount}>{bookmarks.length} sites</span>
+        <span className={styles.siteCount}>{bookmarks.length} {bookmarks.length === 1 ? 'site' : 'sites'}</span>
       </div>
 
       <DndContext
@@ -73,7 +77,12 @@ export default function BookmarksGrid({ folder, bookmarks, tileRefs, onAddLink, 
                 key={bookmark.id}
                 ref={el => { tileRefs.current[bookmark.id] = el; }}
               >
-                <SiteTile bookmark={bookmark} />
+                <SiteTile
+                  bookmark={bookmark}
+                  onEdit={onEditBookmark}
+                  onDelete={onDeleteBookmark}
+                  onVisit={onVisit}
+                />
               </div>
             ))}
             <AddLinkTile onClick={onAddLink} />

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
-import { signAccess, signRefresh, verifyRefresh, REFRESH_TTL_MS } from '../lib/jwt';
+import { signAccess, signRefresh, verifyRefresh, signTotpPending, verifyTotpPending, REFRESH_TTL_MS } from '../lib/jwt';
+import speakeasy from 'speakeasy';
 
 const router = Router();
 
@@ -77,6 +78,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
+    // If TOTP is enabled, issue a short-lived pending token instead of full tokens
+    if (user.totpEnabled) {
+      res.json({ requiresTotp: true, totpToken: signTotpPending(user.id), username: user.username });
+      return;
+    }
     const accessToken = signAccess(user.id);
     const refreshToken = signRefresh(user.id);
     await prisma.refreshToken.create({
@@ -122,6 +128,31 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
     res.json({ accessToken: signAccess(payload.sub), username: user?.username });
   } catch {
     res.status(401).json({ error: 'Invalid refresh token' });
+  }
+});
+
+// Second factor: verify TOTP code and exchange pending token for real tokens
+router.post('/totp-verify', async (req: Request, res: Response): Promise<void> => {
+  const { totpToken, code } = req.body;
+  if (!totpToken || !code) { res.status(400).json({ error: 'totpToken and code required' }); return; }
+  try {
+    const payload = verifyTotpPending(totpToken);
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.totpEnabled || !user.totpSecret) {
+      res.status(401).json({ error: 'TOTP not configured' }); return;
+    }
+    if (!speakeasy.totp.verify({ secret: user.totpSecret, encoding: 'base32', token: String(code), window: 2 })) {
+      res.status(401).json({ error: 'Invalid code' }); return;
+    }
+    const accessToken = signAccess(user.id);
+    const refreshToken = signRefresh(user.id);
+    await prisma.refreshToken.create({
+      data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + REFRESH_TTL_MS) },
+    });
+    res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
+    res.json({ accessToken, username: user.username });
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired session — please sign in again' });
   }
 });
 

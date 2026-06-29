@@ -20,43 +20,63 @@
 .bodyGrid {
   margin-top: 28px;
   display: grid;
-  grid-template-columns: 212px 1fr 290px;
+  grid-template-columns: 212px minmax(0, 1fr) 290px;
   gap: 26px;
   align-items: start;
   animation: rise 0.48s 0.12s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.userBar {
+.topBar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  margin-bottom: 4px;
+  gap: 4px;
+  margin-bottom: 6px;
 }
 
 .username {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
+  opacity: 0.5;
+  margin-right: 4px;
+  pointer-events: none;
+  user-select: none;
 }
 
-.logoutBtn {
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   background: none;
   border: none;
+  border-radius: 8px;
   color: var(--muted);
-  font-family: 'Hanken Grotesk', sans-serif;
-  font-size: 13px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: color 0.15s;
+  opacity: 0.4;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
 }
 
-.logoutBtn:hover {
+.iconBtn:hover {
+  opacity: 1;
   color: var(--text);
+  background: var(--surface2);
 }
 
+/* ── Responsive ── */
 @media (max-width: 900px) {
+  .content {
+    padding: 24px 16px 48px;
+  }
+
   .bodyGrid {
     grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  /* On mobile, widgets column moves below reading list via order */
+  .widgetsCol {
+    order: 3;
   }
 }

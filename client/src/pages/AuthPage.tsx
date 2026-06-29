@@ -1,17 +1,27 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import styles from './AuthPage.module.css';
 
 interface Props {
-  onLogin: (username: string, password: string) => Promise<void>;
+  onLogin: (username: string, password: string) => Promise<{ requiresTotp: true; totpToken: string; username: string } | void>;
   onRegister: (username: string, password: string) => Promise<void>;
+  onTotpVerify: (totpToken: string, code: string) => Promise<void>;
 }
 
-export default function AuthPage({ onLogin, onRegister }: Props) {
+export default function AuthPage({ onLogin, onRegister, onTotpVerify }: Props) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // TOTP step
+  const [totpPending, setTotpPending] = useState<{ token: string; username: string } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const totpRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (totpPending) totpRef.current?.focus();
+  }, [totpPending]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,7 +29,10 @@ export default function AuthPage({ onLogin, onRegister }: Props) {
     setLoading(true);
     try {
       if (tab === 'login') {
-        await onLogin(username, password);
+        const result = await onLogin(username, password);
+        if (result?.requiresTotp) {
+          setTotpPending({ token: result.totpToken, username: result.username });
+        }
       } else {
         await onRegister(username, password);
       }
@@ -28,6 +41,80 @@ export default function AuthPage({ onLogin, onRegister }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleTotpSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!totpPending || totpCode.length !== 6) return;
+    setError('');
+    setLoading(true);
+    try {
+      await onTotpVerify(totpPending.token, totpCode);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed');
+      setTotpCode('');
+      totpRef.current?.focus();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Auto-submit when 6 digits are entered
+  function handleTotpChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setTotpCode(v);
+    if (v.length === 6) {
+      setError('');
+      setLoading(true);
+      onTotpVerify(totpPending!.token, v)
+        .catch(err => {
+          setError(err instanceof Error ? err.message : 'Verification failed');
+          setTotpCode('');
+          totpRef.current?.focus();
+        })
+        .finally(() => setLoading(false));
+    }
+  }
+
+  if (totpPending) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.card}>
+          <div className={styles.logo}>New Tab</div>
+          <div className={styles.subtitle}>Enter the 6-digit code from your authenticator app.</div>
+          <form onSubmit={handleTotpSubmit}>
+            <div className={styles.field}>
+              <label className={styles.label}>Authentication code</label>
+              <input
+                ref={totpRef}
+                className={`${styles.input} ${styles.totpInput}`}
+                type="text"
+                inputMode="numeric"
+                pattern="\d{6}"
+                maxLength={6}
+                placeholder="000 000"
+                value={totpCode}
+                onChange={handleTotpChange}
+                autoComplete="one-time-code"
+              />
+            </div>
+            {error && <div className={styles.error}>{error}</div>}
+            <button className={styles.submit} type="submit" disabled={loading || totpCode.length !== 6}>
+              {loading ? 'Verifying…' : 'Verify'}
+            </button>
+            <p className={styles.switchHint}>
+              <button
+                type="button"
+                className={styles.switchLink}
+                onClick={() => { setTotpPending(null); setTotpCode(''); setError(''); }}
+              >
+                Back to sign in
+              </button>
+            </p>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   return (

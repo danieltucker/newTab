@@ -3,39 +3,53 @@ import { useAuth } from './hooks/useAuth';
 import AuthPage from './pages/AuthPage';
 import NewTabPage from './pages/NewTabPage';
 
-type Theme = 'dark' | 'light';
+export type ThemeSetting = 'dark' | 'light' | 'auto';
+export type ResolvedTheme = 'dark' | 'light';
 
-function getInitialTheme(): Theme {
-  return (localStorage.getItem('theme') as Theme) || 'dark';
+function prefersDark(): boolean {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function resolveTheme(setting: ThemeSetting): ResolvedTheme {
+  return setting === 'auto' ? (prefersDark() ? 'dark' : 'light') : setting;
+}
+
+function getInitialSetting(): ThemeSetting {
+  return (localStorage.getItem('theme') as ThemeSetting) || 'dark';
 }
 
 export default function App() {
-  const { accessToken, username, loading, login, register, logout } = useAuth();
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const { accessToken, username, loading, login, register, logout, verifyTotp } = useAuth();
+  const [themeSetting, setThemeSetting] = useState<ThemeSetting>(getInitialSetting);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    const resolved = resolveTheme(themeSetting);
+    document.documentElement.setAttribute('data-theme', resolved);
+    localStorage.setItem('theme', themeSetting);
 
-  function toggleTheme() {
-    setTheme(t => t === 'dark' ? 'light' : 'dark');
-  }
+    // When in auto mode, track OS preference changes live
+    if (themeSetting !== 'auto') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [themeSetting]);
 
-  if (loading) {
-    return null; // silent splash while session restores
-  }
+  if (loading) return null;
 
   if (!accessToken || !username) {
-    return <AuthPage onLogin={login} onRegister={register} />;
+    return <AuthPage onLogin={login} onRegister={register} onTotpVerify={verifyTotp} />;
   }
 
   return (
     <NewTabPage
       accessToken={accessToken}
       username={username}
-      theme={theme}
-      onToggleTheme={toggleTheme}
+      themeSetting={themeSetting}
+      resolvedTheme={resolveTheme(themeSetting)}
+      onSetTheme={setThemeSetting}
       onLogout={logout}
     />
   );

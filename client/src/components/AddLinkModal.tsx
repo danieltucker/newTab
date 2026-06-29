@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './AddLinkModal.module.css';
 import { Folder } from '../types';
 import { parseDomain, deriveName, deriveColor, faviconUrl } from '../utils/color';
@@ -12,30 +12,43 @@ interface Props {
 
 export default function AddLinkModal({ folders, defaultFolderId, onAdd, onClose }: Props) {
   const [url, setUrl] = useState('');
+  const [nameOverride, setNameOverride] = useState('');
+  const [nameEdited, setNameEdited] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState(defaultFolderId || folders[0]?.id || '');
   const [faviconFailed, setFaviconFailed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const prevDomainRef = useRef<string | null>(null);
+
   const domain = parseDomain(url);
-  const name = domain ? deriveName(domain) : null;
+  const derivedName = domain ? deriveName(domain) : null;
   const color = domain ? deriveColor(domain) : null;
   const favicon = domain ? faviconUrl(domain) : null;
 
-  // Reset favicon error when domain changes
-  useEffect(() => { setFaviconFailed(false); }, [domain]);
+  // Auto-fill name when domain changes, unless user has manually edited it
+  useEffect(() => {
+    setFaviconFailed(false);
+    if (!domain) return;
+    if (!nameEdited && domain !== prevDomainRef.current && derivedName) {
+      setNameOverride(derivedName);
+      prevDomainRef.current = domain;
+    }
+  }, [domain]);
+
+  const displayName = nameOverride || derivedName || '';
 
   function handleBackdrop(e: React.MouseEvent) {
     if (e.target === e.currentTarget) onClose();
   }
 
   async function handleAdd() {
-    if (!domain || !name || !color) return;
+    if (!domain || !color) return;
     setLoading(true);
     try {
       await onAdd({
         folderId: selectedFolderId,
         domain,
-        name,
+        name: displayName || domain,
         faviconUrl: favicon || '',
         color,
       });
@@ -66,7 +79,7 @@ export default function AddLinkModal({ folders, defaultFolderId, onAdd, onClose 
             {domain ? (
               <>
                 <span className={styles.previewMonogram} style={{ color: color! }}>
-                  {name!.charAt(0)}
+                  {displayName.charAt(0).toUpperCase() || domain.charAt(0).toUpperCase()}
                 </span>
                 {!faviconFailed && favicon && (
                   <img
@@ -85,7 +98,7 @@ export default function AddLinkModal({ folders, defaultFolderId, onAdd, onClose 
           </div>
           {domain ? (
             <div className={styles.previewText}>
-              <div className={styles.previewName}>{name}</div>
+              <div className={styles.previewName}>{displayName}</div>
               <div className={styles.previewDomain}>{domain}</div>
             </div>
           ) : (
@@ -105,8 +118,22 @@ export default function AddLinkModal({ folders, defaultFolderId, onAdd, onClose 
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') onClose(); }}
           />
-          <div className={styles.helper}>We pull the favicon and a matching color automatically.</div>
         </div>
+
+        {/* Name input — shown once a domain is recognised */}
+        {domain && (
+          <div className={styles.field}>
+            <label className={styles.label}>Display name</label>
+            <input
+              className={styles.urlInput}
+              type="text"
+              placeholder={derivedName || domain}
+              value={nameOverride}
+              onChange={e => { setNameOverride(e.target.value); setNameEdited(true); }}
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') onClose(); }}
+            />
+          </div>
+        )}
 
         {/* Folder chips */}
         <div className={styles.field}>

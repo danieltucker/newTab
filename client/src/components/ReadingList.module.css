@@ -2,19 +2,270 @@
   margin-top: 28px;
 }
 
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .sectionLabel {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted);
+}
+
+.addBtn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+
+.addBtn:hover {
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+
+.cancelBtn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.cancelBtn:hover {
+  color: var(--text);
+}
+
+.addForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.formInput {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.formInput:focus {
+  border-color: var(--accent);
+}
+
+.formInput::placeholder {
+  color: var(--muted);
+}
+
+.saveBtn {
+  align-self: flex-end;
+  padding: 0 16px;
+  min-height: 36px;
+  background: var(--accent);
+  border: none;
+  border-radius: 9px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.saveBtn:hover {
+  filter: brightness(1.08);
+}
+
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.titleRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.titleRow .formInput {
+  padding-right: 36px;
+}
+
+/* ── Tag filter chips ── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: 12px;
 }
 
+.chip {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chipActive {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Archive section ── */
+.archivedSection {
+  margin-top: 20px;
+}
+
+.archivedToggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 10px;
+  transition: color 0.12s;
+}
+
+.archivedToggle:hover {
+  color: var(--text);
+}
+
+.chevron {
+  font-size: 9px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.archivedGrid {
+  opacity: 0.6;
+}
+
+.archivedCard .card {
+  border-style: dashed;
+}
+
+/* ── Card action buttons ── */
+.cardActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.cardWrap:hover .cardActions {
+  opacity: 1;
+}
+
+.actionBtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.editBtn:hover {
+  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
+  color: var(--accent);
+}
+
+.archiveBtn:hover {
+  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
+  color: var(--accent);
+}
+
+.deleteBtn:hover {
+  background: color-mix(in oklab, #FF4500 15%, var(--surface2));
+  color: #FF4500;
+}
+
+.fetchingDot {
+  position: absolute;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 .grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  columns: 2;
+  column-gap: 12px;
+}
+
+/* Lift the whole wrap (card + action buttons) together on hover */
+.cardWrap {
+  position: relative;
+  break-inside: avoid;
+  margin-bottom: 12px;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.cardWrap:hover {
+  transform: translateY(-3px);
 }
 
 .card {
@@ -27,13 +278,20 @@
   border: 1px solid var(--border);
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s, border-color 0.15s;
+  transition: box-shadow 0.2s, border-color 0.15s;
+  width: 100%;
 }
 
-.card:hover {
-  transform: translateY(-3px);
+.cardWrap:hover .card {
   box-shadow: 0 12px 28px var(--shadow);
   border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .tag {
@@ -43,7 +301,16 @@
   border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent);
   border-radius: 6px;
   padding: 2px 7px;
-  align-self: flex-start;
+}
+
+.notes {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .title {
@@ -55,13 +322,30 @@
 }
 
 .meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.sourceFavicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 
 .empty {
   color: var(--muted);
   font-size: 14px;
-  grid-column: span 2;
+  column-span: all;
   padding: 16px 0;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    columns: 1;
+  }
 }

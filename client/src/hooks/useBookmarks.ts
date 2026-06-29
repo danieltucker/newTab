@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiGet, apiPost, apiPut, apiDelete } from '../services/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiFetch } from '../services/api';
 import { Bookmark } from '../types';
 
 export function useBookmarks(accessToken: string | null, folderId: string | null) {
@@ -29,6 +29,16 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
     return bookmark;
   }, [folderId]);
 
+  const updateBookmark = useCallback(async (id: string, updates: Partial<Pick<Bookmark, 'domain' | 'name' | 'faviconUrl' | 'color' | 'folderId'>>) => {
+    const updated = await apiPut<Bookmark>(`/api/bookmarks/${id}`, updates);
+    if (updates.folderId && updates.folderId !== folderId) {
+      setBookmarks(prev => prev.filter(b => b.id !== id));
+    } else {
+      setBookmarks(prev => prev.map(b => b.id === id ? updated : b));
+    }
+    return updated;
+  }, [folderId]);
+
   const deleteBookmark = useCallback(async (id: string) => {
     await apiDelete(`/api/bookmarks/${id}`);
     setBookmarks(prev => prev.filter(b => b.id !== id));
@@ -39,5 +49,17 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
     await apiPut('/api/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
   }, []);
 
-  return { bookmarks, setBookmarks, loading, addBookmark, deleteBookmark, reorderBookmarks, reload: load };
+  const checkFeed = useCallback(async (id: string) => {
+    const res = await apiFetch(`/api/bookmarks/${id}/check-feed`, { method: 'POST' });
+    if (!res.ok) return;
+    const updated: Bookmark = await res.json();
+    setBookmarks(prev => prev.map(b => b.id === id ? updated : b));
+  }, []);
+
+  const markVisited = useCallback(async (id: string) => {
+    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, lastVisitedAt: new Date().toISOString() } : b));
+    apiFetch(`/api/bookmarks/${id}/visited`, { method: 'POST' }).catch(() => {});
+  }, []);
+
+  return { bookmarks, setBookmarks, loading, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, checkFeed, markVisited, reload: load };
 }

@@ -1,0 +1,336 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  width: min(480px, 94vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.closeBtn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Drop zone ── */
+.dropZone {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropZone:hover,
+.dropZoneActive {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 5%, transparent);
+}
+
+.dropIcon {
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.dropZone:hover .dropIcon,
+.dropZoneActive .dropIcon {
+  color: var(--accent);
+}
+
+.dropLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dropSub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Export hints ── */
+.exportHint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.exportHint strong {
+  color: var(--text);
+}
+
+.exportHint ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Preview ── */
+.previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.backLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.previewList {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.previewItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.previewItem:last-child {
+  border-bottom: none;
+}
+
+.previewFavicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.previewText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.previewName {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.previewDomain {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.previewMore {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Folder selector ── */
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.folderLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.folderSelect {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 12px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.folderSelect:focus {
+  border-color: var(--accent);
+}
+
+/* ── Done state ── */
+.doneIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: color-mix(in oklab, #1DB954 15%, var(--surface2));
+  border: 1px solid color-mix(in oklab, #1DB954 30%, transparent);
+  color: #1DB954;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  margin-top: 8px;
+}
+
+.doneTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+}
+
+.doneText {
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.doneText strong {
+  color: var(--text);
+}
+
+/* ── Footer ── */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cancelBtn {
+  padding: 9px 16px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.cancelBtn:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.importBtn {
+  padding: 9px 18px;
+  background: var(--accent);
+  border: none;
+  border-radius: 9px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.importBtn:hover { filter: brightness(1.08); }
+.importBtn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+/* ── Error ── */
+.error {
+  font-size: 13px;
+  color: #FF4500;
+  padding: 8px 12px;
+  background: rgba(255, 69, 0, 0.08);
+  border-radius: 8px;
+}

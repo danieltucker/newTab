@@ -25,7 +25,7 @@ export function useAuth() {
       .catch(() => setState({ accessToken: null, username: null, loading: false }));
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string): Promise<{ requiresTotp: true; totpToken: string; username: string } | void> => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -35,6 +35,25 @@ export function useAuth() {
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || 'Login failed');
+    }
+    const data = await res.json();
+    if (data.requiresTotp) {
+      return { requiresTotp: true, totpToken: data.totpToken, username: data.username };
+    }
+    setAccessToken(data.accessToken);
+    setState({ accessToken: data.accessToken, username: data.username, loading: false });
+  }, []);
+
+  const verifyTotp = useCallback(async (totpToken: string, code: string) => {
+    const res = await fetch('/api/auth/totp-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ totpToken, code }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Verification failed');
     }
     const data = await res.json();
     setAccessToken(data.accessToken);
@@ -63,5 +82,5 @@ export function useAuth() {
     setState({ accessToken: null, username: null, loading: false });
   }, []);
 
-  return { ...state, login, register, logout };
+  return { ...state, login, register, logout, verifyTotp };
 }
