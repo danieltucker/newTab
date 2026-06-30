@@ -57,6 +57,10 @@
   color: var(--muted);
 }
 
+.addWrap {
+  position: relative;
+}
+
 .addWidget {
   width: 100%;
   min-height: 46px;
@@ -73,4 +77,54 @@
 .addWidget:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px var(--shadow);
+  overflow: hidden;
+  animation: pop 0.12s ease;
+  z-index: 20;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.pickerItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 11px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+}
+
+.pickerItem:last-child { border-bottom: none; }
+.pickerItem:hover { background: var(--surface2); }
+
+.pickerLabel {
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pickerDesc {
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.7;
 }

@@ -10,13 +10,18 @@
   gap: 12px;
   padding: 9px 11px;
   border-radius: 13px;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   background: transparent;
   border: 1px solid transparent;
   width: 100%;
   text-align: left;
   transition: background 0.15s, transform 0.12s, border-color 0.15s;
   position: relative;
+}
+
+.folderItem:active {
+  cursor: grabbing;
 }
 
 .folderItem:hover {
@@ -113,30 +118,19 @@
   margin-top: 1px;
 }
 
-/* ── Drag handle ── */
-.dragHandle {
+.folderUnread {
   flex-shrink: 0;
-  width: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--border);
-  cursor: grab;
-  opacity: 0;
-  transition: opacity 0.12s, color 0.12s;
-  touch-action: none;
-}
-
-.folderItem:hover .dragHandle {
-  opacity: 1;
-}
-
-.dragHandle:hover {
-  color: var(--muted);
-}
-
-.dragHandle:active {
-  cursor: grabbing;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'Hanken Grotesk', sans-serif;
+  line-height: 16px;
+  text-align: center;
 }
 
 .dragging {
@@ -251,33 +245,6 @@
   transform: scale(0.985);
 }
 
-.importBtn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 42px;
-  padding: 9px 11px;
-  background: transparent;
-  border: 1px dashed var(--border);
-  border-radius: 13px;
-  color: var(--muted);
-  font-family: 'Hanken Grotesk', sans-serif;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.15s, color 0.15s, transform 0.12s;
-  flex-shrink: 0;
-}
-
-.importBtn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.importBtn:active {
-  transform: scale(0.985);
-}
-
 /* ── Responsive: horizontal strip on mobile ── */
 @media (max-width: 900px) {
   .sidebar {
@@ -357,14 +324,4 @@
     text-align: center;
   }
 
-  .importBtn {
-    flex-direction: column;
-    min-width: 60px;
-    min-height: 52px;
-    padding: 8px 10px;
-    justify-content: center;
-    align-items: center;
-    font-size: 11px;
-    gap: 3px;
-  }
 }

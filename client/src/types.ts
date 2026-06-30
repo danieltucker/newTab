@@ -3,6 +3,20 @@ export interface Folder {
   name: string;
   color: string;
   position: number;
+  feedUrls: string[];
+  feedLastCheckedAt?: string | null;
+}
+
+export interface FeedArticle {
+  id: string;
+  feedUrl: string;
+  title: string;
+  link: string;
+  source: string;
+  pubDate: string | null;
+  fetchedAt: string;
+  readTime: number | null;
+  categories: string[];
 }
 
 export interface Bookmark {
@@ -16,6 +30,7 @@ export interface Bookmark {
   feedUrl?: string | null;
   feedCheckedAt?: string | null;
   feedLatestAt?: string | null;
+  unreadCount?: number;
   lastVisitedAt?: string | null;
 }
 

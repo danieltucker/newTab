@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './ReadingList.module.css';
 import { ReadingListItem } from '../types';
 import { parseDomain } from '../utils/color';
@@ -12,6 +12,8 @@ interface Props {
   onUpdate: (id: string, patch: Pick<ReadingListItem, 'title' | 'tag' | 'notes'>) => Promise<void>;
   onDelete: (id: string) => void;
   onArchive: (id: string, archived: boolean) => Promise<void>;
+  articleOpenMode?: 'new-tab' | 'same-tab' | 'iframe';
+  onOpenArticle?: (url: string) => void;
 }
 
 function parseTags(tag: string): string[] {
@@ -48,16 +50,43 @@ function PencilIcon() {
 
 interface CardProps {
   item: ReadingListItem;
+  isPendingDelete?: boolean;
   onDelete: (id: string) => void;
+  onUndo: (id: string) => void;
   onArchive: (id: string, archived: boolean) => Promise<void>;
   onEdit: (item: ReadingListItem) => void;
+  articleOpenMode?: 'new-tab' | 'same-tab' | 'iframe';
+  onOpenArticle?: (url: string) => void;
 }
 
-function ReadingCard({ item, onDelete, onArchive, onEdit }: CardProps) {
+function ReadingCard({ item, isPendingDelete, onDelete, onUndo, onArchive, onEdit, articleOpenMode = 'new-tab', onOpenArticle }: CardProps) {
   const tags = parseTags(item.tag);
+
+  function handleCardClick(e: React.MouseEvent) {
+    if (articleOpenMode === 'iframe') {
+      e.preventDefault();
+      onOpenArticle?.(item.url);
+    }
+  }
+
+  const linkProps = articleOpenMode === 'new-tab'
+    ? { target: '_blank', rel: 'noopener noreferrer' }
+    : articleOpenMode === 'iframe'
+      ? {}
+      : {};
+
   return (
-    <div className={`${styles.cardWrap} ${item.archived ? styles.archivedCard : ''}`}>
-      <a href={item.url} className={styles.card} target="_blank" rel="noopener noreferrer">
+    <div className={`${styles.cardWrap} ${item.archived ? styles.archivedCard : ''} ${isPendingDelete ? styles.pendingDelete : ''}`}>
+      {isPendingDelete && (
+        <div className={styles.ghostOverlay}>
+          <div className={styles.ghostCenter}>
+            <span className={styles.ghostLabel}>Deleted</span>
+            <button className={styles.undoBtn} onClick={() => onUndo(item.id)}>Undo</button>
+          </div>
+          <div className={styles.countdownBar} />
+        </div>
+      )}
+      <a href={item.url} className={styles.card} onClick={handleCardClick} {...linkProps}>
         {tags.length > 0 && (
           <div className={styles.tagRow}>
             {tags.map(t => <span key={t} className={styles.tag}>{t}</span>)}
@@ -78,37 +107,61 @@ function ReadingCard({ item, onDelete, onArchive, onEdit }: CardProps) {
         </div>
       </a>
 
-      <div className={styles.cardActions}>
-        <button
-          className={`${styles.actionBtn} ${styles.editBtn}`}
-          aria-label="Edit article"
-          title="Edit"
-          onClick={() => onEdit(item)}
-        >
-          <PencilIcon />
-        </button>
-        <button
-          className={`${styles.actionBtn} ${styles.archiveBtn}`}
-          aria-label={item.archived ? 'Restore' : 'Archive'}
-          title={item.archived ? 'Restore' : 'Archive'}
-          onClick={() => onArchive(item.id, !item.archived)}
-        >
-          {item.archived ? <RestoreIcon /> : <ArchiveIcon />}
-        </button>
-        <button
-          className={`${styles.actionBtn} ${styles.deleteBtn}`}
-          aria-label="Remove article"
-          title="Delete"
-          onClick={() => onDelete(item.id)}
-        >
-          ✕
-        </button>
-      </div>
+      {!isPendingDelete && (
+        <div className={styles.cardActions}>
+          <button
+            className={`${styles.actionBtn} ${styles.editBtn}`}
+            aria-label="Edit article"
+            title="Edit"
+            onClick={() => onEdit(item)}
+          >
+            <PencilIcon />
+          </button>
+          <button
+            className={`${styles.actionBtn} ${styles.archiveBtn}`}
+            aria-label={item.archived ? 'Restore' : 'Archive'}
+            title={item.archived ? 'Restore' : 'Archive'}
+            onClick={() => onArchive(item.id, !item.archived)}
+          >
+            {item.archived ? <RestoreIcon /> : <ArchiveIcon />}
+          </button>
+          <button
+            className={`${styles.actionBtn} ${styles.deleteBtn}`}
+            aria-label="Remove article"
+            title="Delete"
+            onClick={() => onDelete(item.id)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchive }: Props) {
+const DELETE_DELAY = 3000;
+
+export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchive, articleOpenMode, onOpenArticle }: Props) {
+  const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
+  const timerMap = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  function requestDelete(id: string) {
+    setPendingDeletes(prev => new Set(prev).add(id));
+    timerMap.current[id] = setTimeout(() => {
+      onDelete(id);
+      setPendingDeletes(prev => { const s = new Set(prev); s.delete(id); return s; });
+      delete timerMap.current[id];
+    }, DELETE_DELAY);
+  }
+
+  function undoDelete(id: string) {
+    clearTimeout(timerMap.current[id]);
+    delete timerMap.current[id];
+    setPendingDeletes(prev => { const s = new Set(prev); s.delete(id); return s; });
+  }
+
+  useEffect(() => () => { Object.values(timerMap.current).forEach(clearTimeout); }, []);
+
   const [expanded, setExpanded] = useState(false);
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -253,9 +306,13 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
           <ReadingCard
             key={item.id}
             item={item}
-            onDelete={onDelete}
+            isPendingDelete={pendingDeletes.has(item.id)}
+            onDelete={requestDelete}
+            onUndo={undoDelete}
             onArchive={onArchive}
             onEdit={setEditingItem}
+            articleOpenMode={articleOpenMode}
+            onOpenArticle={onOpenArticle}
           />
         ))}
       </div>
@@ -275,9 +332,13 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
                 <ReadingCard
                   key={item.id}
                   item={item}
-                  onDelete={onDelete}
+                  isPendingDelete={pendingDeletes.has(item.id)}
+                  onDelete={requestDelete}
+                  onUndo={undoDelete}
                   onArchive={onArchive}
                   onEdit={setEditingItem}
+                  articleOpenMode={articleOpenMode}
+                  onOpenArticle={onOpenArticle}
                 />
               ))}
             </div>

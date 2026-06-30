@@ -9,6 +9,7 @@ import readingListRoutes from './routes/readingList';
 import utilRoutes from './routes/util';
 import settingsRoutes from './routes/settings';
 import totpRoutes from './routes/totp';
+import widgetRoutes from './routes/widgets';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,6 +28,7 @@ app.use('/api/reading-list', readingListRoutes);
 app.use('/api/util', utilRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/totp', totpRoutes);
+app.use('/api/widgets', widgetRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 

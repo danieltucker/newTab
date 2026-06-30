@@ -17,6 +17,23 @@
   gap: 8px;
 }
 
+/* ── Remove button ───────────────────────── */
+.removeBtn {
+  background: none;
+  border: none;
+  padding: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.12s;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.card:hover .removeBtn { opacity: 0.5; }
+.removeBtn:hover { opacity: 1 !important; color: #e44; }
+
 /* ── No location set ─────────────────────── */
 .empty {
   padding: 4px 0 2px;

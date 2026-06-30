@@ -6,32 +6,39 @@
 
 .left {}
 
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 18px;
+  user-select: none;
+}
+
+.mark {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.logoText {
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
 .greeting {
   font-family: 'Bricolage Grotesque', sans-serif;
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--text);
   line-height: 1.1;
 }
 
 .date {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
-  margin-top: 8px;
-}
-
-.right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-}
-
-.clock {
-  font-family: 'Bricolage Grotesque', sans-serif;
-  font-size: 42px;
-  font-weight: 600;
-  color: var(--text);
-  line-height: 1;
+  margin-top: 5px;
 }
 

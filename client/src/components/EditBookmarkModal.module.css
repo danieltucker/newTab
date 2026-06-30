@@ -1,3 +1,44 @@
+/* ── Color palette ── */
+.colorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.colorSwatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.colorSwatch:hover {
+  transform: scale(1.15);
+  border-color: rgba(255,255,255,0.5);
+}
+
+.colorSwatchAuto,
+.colorSwatchSelected {
+  border-color: rgba(255,255,255,0.85);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.autoCheck {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  line-height: 1;
+  pointer-events: none;
+}
+
 .nameInput {
   font-family: 'Hanken Grotesk', sans-serif !important;
 }

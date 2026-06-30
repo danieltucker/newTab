@@ -145,7 +145,145 @@
   color: var(--accent);
 }
 
-/* ── Edit mode ───────────────────────────── */
+.removeBtn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.12s;
+  display: flex;
+  align-items: center;
+}
+
+.card:hover .removeBtn { opacity: 0.5; }
+.removeBtn:hover { opacity: 1 !important; color: #e44; }
+
+/* ── Save / discard buttons ─────────────── */
+.saveBtn,
+.discardBtn {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Hanken Grotesk', sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.saveBtn {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+}
+
+.saveBtn:hover {
+  opacity: 0.85;
+}
+
+.discardBtn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.discardBtn:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+/* ── Editor wrapper + slash menu ─────────── */
+.editorWrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.slashMenu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--shadow);
+  z-index: 50;
+  overflow: hidden;
+  animation: popIn 0.1s ease;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.slashHint {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 8px 12px 4px;
+  opacity: 0.6;
+}
+
+.slashItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 7px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.slashItem:hover,
+.slashItemSel {
+  background: var(--surface2);
+}
+
+.slashBadge {
+  flex-shrink: 0;
+  width: 26px;
+  height: 22px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slashItemSel .slashBadge {
+  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
+  border-color: var(--accent);
+}
+
+.slashLabel {
+  font-size: 13px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.slashHintText {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+/* ── Edit mode ────────────────���──────────── */
 .textarea {
   flex: 1;
   min-height: 130px;
@@ -213,11 +351,14 @@
 
 .markdown li { margin-bottom: 3px; }
 
-/* GFM task list checkboxes */
-.markdown input[type="checkbox"] {
+/* GFM task list checkboxes — interactive in preview */
+.markdown input[type="checkbox"],
+.todoCheck {
   accent-color: var(--accent);
   margin-right: 6px;
-  cursor: default;
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
 }
 
 .markdown li:has(input[type="checkbox"]) {

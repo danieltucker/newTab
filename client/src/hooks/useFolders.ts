@@ -25,7 +25,7 @@ export function useFolders(accessToken: string | null) {
     return folder;
   }, []);
 
-  const updateFolder = useCallback(async (id: string, updates: Partial<Pick<Folder, 'name' | 'color'>>) => {
+  const updateFolder = useCallback(async (id: string, updates: Partial<Pick<Folder, 'name' | 'color' | 'feedUrls'>>) => {
     await apiPut(`/api/folders/${id}`, updates);
     setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
   }, []);

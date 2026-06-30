@@ -4,6 +4,11 @@ import ownStyles from './EditBookmarkModal.module.css';
 import { Folder, Bookmark } from '../types';
 import { parseDomain, deriveName, deriveColor, faviconUrl } from '../utils/color';
 
+const PALETTE = [
+  '#5E6AD2', '#FF4500', '#EA4C89', '#1DB954', '#F48024', '#A259FF',
+  '#E0479E', '#00A8E8', '#FF6600', '#24A0ED', '#7C5CFC', '#0FB57B',
+];
+
 interface Props {
   bookmark: Bookmark;
   folders: Folder[];
@@ -18,6 +23,7 @@ export default function EditBookmarkModal({ bookmark, folders, onSave, onDelete,
   const [nameOverride, setNameOverride] = useState(bookmark.name);
   const [nameEdited, setNameEdited] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState(bookmark.folderId);
+  const [colorOverride, setColorOverride] = useState<string | null>(null);
   const [faviconFailed, setFaviconFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -26,7 +32,8 @@ export default function EditBookmarkModal({ bookmark, folders, onSave, onDelete,
   const prevDomainRef = useRef(parseDomain(bookmark.domain) || bookmark.domain);
 
   const domain = parseDomain(url);
-  const color = domain ? deriveColor(domain) : bookmark.color;
+  const autoColor = domain ? deriveColor(domain) : bookmark.color;
+  const color = colorOverride ?? bookmark.color;
   const favicon = domain ? faviconUrl(domain) : null;
 
   // Auto-derive name only when domain changes from what we had before
@@ -51,7 +58,7 @@ export default function EditBookmarkModal({ bookmark, folders, onSave, onDelete,
         domain,
         name: nameOverride.trim() || domain,
         faviconUrl: favicon || '',
-        color,
+        color: colorOverride ?? autoColor,
         folderId: selectedFolderId,
       });
       onClose();
@@ -117,6 +124,28 @@ export default function EditBookmarkModal({ bookmark, folders, onSave, onDelete,
             placeholder={domain || bookmark.name}
             onChange={e => { setNameOverride(e.target.value); setNameEdited(true); }}
           />
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Color</label>
+          <div className={ownStyles.colorRow}>
+            <button
+              className={`${ownStyles.colorSwatch} ${!colorOverride ? ownStyles.colorSwatchAuto : ''}`}
+              style={{ background: autoColor }}
+              onClick={() => setColorOverride(null)}
+              title="Auto (derived from favicon)"
+            >
+              {!colorOverride && <span className={ownStyles.autoCheck}>✓</span>}
+            </button>
+            {PALETTE.map(c => (
+              <button
+                key={c}
+                className={`${ownStyles.colorSwatch} ${colorOverride === c ? ownStyles.colorSwatchSelected : ''}`}
+                style={{ background: c }}
+                onClick={() => setColorOverride(c)}
+              />
+            ))}
+          </div>
         </div>
 
         <div className={styles.field}>

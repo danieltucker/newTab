@@ -6,12 +6,13 @@ import { parseDomain, deriveName, deriveColor, faviconUrl } from '../utils/color
 interface Props {
   folders: Folder[];
   defaultFolderId: string | null;
+  defaultUrl?: string;
   onAdd: (payload: { folderId: string; domain: string; name: string; faviconUrl: string; color: string }) => Promise<void>;
   onClose: () => void;
 }
 
-export default function AddLinkModal({ folders, defaultFolderId, onAdd, onClose }: Props) {
-  const [url, setUrl] = useState('');
+export default function AddLinkModal({ folders, defaultFolderId, defaultUrl, onAdd, onClose }: Props) {
+  const [url, setUrl] = useState(defaultUrl ?? '');
   const [nameOverride, setNameOverride] = useState('');
   const [nameEdited, setNameEdited] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState(defaultFolderId || folders[0]?.id || '');

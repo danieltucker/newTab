@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import styles from './SettingsModal.module.css';
 import { UserSettings } from '../hooks/useSettings';
 import { apiFetch } from '../services/api';
@@ -7,9 +7,10 @@ interface Props {
   settings: UserSettings;
   onUpdate: (patch: Partial<UserSettings>) => Promise<void>;
   onClose: () => void;
+  onImport?: () => void;
 }
 
-type Section = 'search' | 'appearance' | 'security' | 'advanced';
+type Section = 'search' | 'appearance' | 'reading' | 'security' | 'advanced' | 'integrations';
 
 const ENGINES = [
   { id: 'google',     label: 'Google',     url: 'google.com' },
@@ -18,12 +19,42 @@ const ENGINES = [
   { id: 'brave',      label: 'Brave',       url: 'search.brave.com' },
 ] as const;
 
-const NAV: { id: Section; label: string; icon: string }[] = [
-  { id: 'search',     label: 'Search',     icon: '⌕' },
-  { id: 'appearance', label: 'Appearance', icon: '◑' },
-  { id: 'security',   label: 'Security',   icon: '⚿' },
-  { id: 'advanced',   label: 'Advanced',   icon: '⚙' },
+const BookOpenIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+    <path d="M8 13.5C6.5 13 4 12.5 2 13V3.5C4 3 6.5 3.5 8 4.5" />
+    <path d="M8 13.5C9.5 13 12 12.5 14 13V3.5C12 3 9.5 3.5 8 4.5" />
+    <line x1="8" y1="4.5" x2="8" y2="13.5" />
+  </svg>
+);
+
+const NAV: { id: Section; label: string; icon: ReactNode }[] = [
+  { id: 'search',       label: 'Search',       icon: '⌕' },
+  { id: 'appearance',   label: 'Appearance',   icon: '◑' },
+  { id: 'reading',      label: 'Reading',      icon: <BookOpenIcon /> },
+  { id: 'security',     label: 'Security',     icon: '⚿' },
+  { id: 'advanced',     label: 'Advanced',     icon: '⚙' },
+  { id: 'integrations', label: 'Integrations', icon: '⇌' },
 ];
+
+function BookmarkletRow({ label, href }: { label: string; href: string }) {
+  const [copied, setCopied] = useState(false);
+  async function handleCopy() {
+    try { await navigator.clipboard.writeText(href); } catch {}
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <div className={styles.bookmarkletRow}>
+      {/* eslint-disable-next-line react/jsx-no-script-url */}
+      <a href={href} className={styles.bookmarkletLink} onClick={e => e.preventDefault()} draggable>
+        {label}
+      </a>
+      <button className={styles.copyBtn} onClick={handleCopy}>
+        {copied ? 'Copied!' : 'Copy URL'}
+      </button>
+    </div>
+  );
+}
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -36,7 +67,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
+export default function SettingsModal({ settings, onUpdate, onClose, onImport }: Props) {
   const [section, setSection] = useState<Section>('search');
 
   // ── TOTP state ────────────────────────────────────────────────────────────────
@@ -172,25 +203,129 @@ export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
             )}
 
             {section === 'appearance' && (
-              <div className={styles.sectionBlock}>
-                <div className={styles.row}>
-                  <div>
-                    <div className={styles.rowLabel}>Theme</div>
-                    <div className={styles.rowHint}>Dark, light, or follow your system setting</div>
-                  </div>
-                  <div className={styles.themePicker}>
-                    {(['dark', 'auto', 'light'] as const).map(t => (
-                      <button
-                        key={t}
-                        className={`${styles.themeOption} ${settings.theme === t ? styles.themeOptionActive : ''}`}
-                        onClick={() => onUpdate({ theme: t })}
-                      >
-                        {t === 'dark' ? '🌙 Dark' : t === 'auto' ? '⚙ Auto' : '☀ Light'}
-                      </button>
-                    ))}
+              <>
+                <div className={styles.sectionBlock}>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Theme</div>
+                      <div className={styles.rowHint}>Dark, light, or follow your system setting</div>
+                    </div>
+                    <div className={styles.themePicker}>
+                      {(['dark', 'auto', 'light'] as const).map(t => (
+                        <button
+                          key={t}
+                          className={`${styles.themeOption} ${settings.theme === t ? styles.themeOptionActive : ''}`}
+                          onClick={() => onUpdate({ theme: t })}
+                        >
+                          {t === 'dark' ? '🌙 Dark' : t === 'auto' ? '⚙ Auto' : '☀ Light'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+
+                <div className={styles.sectionBlock}>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Clock format</div>
+                      <div className={styles.rowHint}>How the header clock and clock widgets display time</div>
+                    </div>
+                    <div className={styles.themePicker}>
+                      {(['12h', '24h'] as const).map(f => (
+                        <button
+                          key={f}
+                          className={`${styles.themeOption} ${settings.clockFormat === f ? styles.themeOptionActive : ''}`}
+                          onClick={() => onUpdate({ clockFormat: f })}
+                        >
+                          {f === '12h' ? '12h' : '24h'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Background</div>
+                  <div className={styles.gradientGrid}>
+                    {([
+                      { key: 'none',     label: 'None',     preview: '' },
+                      { key: 'aurora',   label: 'Aurora',   preview: 'linear-gradient(135deg,#0d3b2e,#1a1040)' },
+                      { key: 'dusk',     label: 'Dusk',     preview: 'linear-gradient(135deg,#4a1505,#2e0540)' },
+                      { key: 'ocean',    label: 'Ocean',    preview: 'linear-gradient(135deg,#0a2840,#043330)' },
+                      { key: 'midnight', label: 'Midnight', preview: 'linear-gradient(135deg,#1a0533,#0d0d2a)' },
+                      { key: 'rose',     label: 'Rose',     preview: 'linear-gradient(135deg,#3d0520,#2e1a00)' },
+                    ] as const).map(g => {
+                      const active = (settings.backgroundGradient ?? 'none') === g.key;
+                      return (
+                        <button key={g.key} className={`${styles.gradientOption} ${active ? styles.gradientActive : ''}`} onClick={() => onUpdate({ backgroundGradient: g.key })}>
+                          <div className={styles.gradientSwatch} style={{ background: g.preview || 'var(--surface)' }} />
+                          <span className={styles.gradientLabel}>{g.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {section === 'reading' && (
+              <>
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Reading list</div>
+                  <div className={styles.openModeList}>
+                    {([
+                      { value: 'same-tab', label: 'Same tab',       hint: 'Opens saved articles in the current tab' },
+                      { value: 'new-tab',  label: 'New tab',        hint: 'Opens saved articles in a new browser tab' },
+                      { value: 'reader',   label: 'Reader overlay', hint: 'Shows a 90% overlay — close to come back. Sites that block embedding open in a new tab.' },
+                    ] as const).map(opt => {
+                      const cur = settings.readingListOpenMode ?? settings.articleOpenMode;
+                      const active = cur === opt.value || (opt.value === 'reader' && cur === 'iframe');
+                      return (
+                        <button
+                          key={opt.value}
+                          className={`${styles.openModeOption} ${active ? styles.openModeSelected : ''}`}
+                          onClick={() => onUpdate({ readingListOpenMode: opt.value === 'reader' ? 'reader' : opt.value })}
+                        >
+                          <div className={styles.openModeRadio}>
+                            <span className={active ? styles.radioFilled : styles.radioEmpty} />
+                          </div>
+                          <div>
+                            <div className={styles.openModeLabel}>{opt.label}</div>
+                            <div className={styles.rowHint}>{opt.hint}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Bookmarks</div>
+                  <div className={styles.openModeList}>
+                    {([
+                      { value: 'same-tab', label: 'Same tab', hint: 'Navigate to the bookmarked site in the current tab' },
+                      { value: 'new-tab',  label: 'New tab',  hint: 'Open bookmarks in a new browser tab' },
+                    ] as const).map(opt => {
+                      const active = (settings.bookmarkOpenMode ?? 'same-tab') === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          className={`${styles.openModeOption} ${active ? styles.openModeSelected : ''}`}
+                          onClick={() => onUpdate({ bookmarkOpenMode: opt.value })}
+                        >
+                          <div className={styles.openModeRadio}>
+                            <span className={active ? styles.radioFilled : styles.radioEmpty} />
+                          </div>
+                          <div>
+                            <div className={styles.openModeLabel}>{opt.label}</div>
+                            <div className={styles.rowHint}>{opt.hint}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
             )}
 
             {section === 'security' && (
@@ -279,8 +414,36 @@ export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
                     onChange={v => onUpdate({ consoleEnabled: v })}
                   />
                 </div>
+                {onImport && (
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Import bookmarks</div>
+                      <div className={styles.rowHint}>Import bookmarks from a browser HTML export or JSON file</div>
+                    </div>
+                    <button className={styles.enableBtn} onClick={() => { onImport(); onClose(); }}>
+                      Import
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+
+            {section === 'integrations' && (() => {
+              const origin = typeof window !== 'undefined' ? window.location.origin : '';
+              const saveHref = `javascript:(function(){var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title);window.open('${origin}/?intent=save-article&url='+u+'&title='+t,'_blank','width=500,height=480,popup=1');})();`;
+              const bmHref = `javascript:(function(){var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title);window.open('${origin}/?intent=add-bookmark&url='+u+'&title='+t,'_blank','width=500,height=500,popup=1');})();`;
+              return (
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Browser bookmarklets</div>
+                  <div className={styles.rowHint} style={{ marginBottom: 18 }}>
+                    Drag these links to your bookmarks bar for one-click saving from any page.
+                    Can't drag? Use "Copy URL" then create a bookmark manually and paste into the URL field.
+                  </div>
+                  <BookmarkletRow label="Save to Reading List" href={saveHref} />
+                  <BookmarkletRow label="Add Bookmark" href={bmHref} />
+                </div>
+              );
+            })()}
 
           </div>
         </div>

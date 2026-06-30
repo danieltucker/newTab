@@ -6,10 +6,14 @@ import speakeasy from 'speakeasy';
 
 const router = Router();
 
+const cookieSecure = process.env.COOKIE_SECURE !== undefined
+  ? process.env.COOKIE_SECURE === 'true'
+  : process.env.NODE_ENV === 'production';
+
 const COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'strict' as const,
-  secure: process.env.NODE_ENV === 'production',
+  secure: cookieSecure,
   maxAge: REFRESH_TTL_MS,
   path: '/api/auth',
 };

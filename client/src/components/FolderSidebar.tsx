@@ -17,7 +17,6 @@ interface Props {
   bookmarksByFolder: Record<string, Bookmark[]>;
   onSelectFolder: (id: string, el: HTMLElement) => void;
   onNewFolder: () => void;
-  onImport: () => void;
   onEditFolder: (f: Folder) => void;
   onDeleteFolder: (id: string) => void;
   onReorderFolders: (reordered: Folder[]) => void;
@@ -42,16 +41,17 @@ function FolderMenu({ folder, onEdit, onDelete }: { folder: Folder; onEdit: (f: 
       <button
         className={styles.menuTrigger}
         onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        onPointerDown={e => e.stopPropagation()}
         aria-label="Folder options"
       >
         ···
       </button>
       {open && (
         <div className={styles.dropdown}>
-          <button className={styles.dropdownItem} onClick={e => { e.stopPropagation(); setOpen(false); onEdit(folder); }}>
+          <button className={styles.dropdownItem} onClick={e => { e.stopPropagation(); setOpen(false); onEdit(folder); }} onPointerDown={e => e.stopPropagation()}>
             Edit
           </button>
-          <button className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`} onClick={e => { e.stopPropagation(); setOpen(false); onDelete(folder.id); }}>
+          <button className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`} onClick={e => { e.stopPropagation(); setOpen(false); onDelete(folder.id); }} onPointerDown={e => e.stopPropagation()}>
             Delete
           </button>
         </div>
@@ -83,28 +83,11 @@ function SortableFolder({ folder, isActive, sites, onSelect, onEdit, onDelete, f
         transform: CSS.Transform.toString(transform),
         transition,
       } as React.CSSProperties}
-      role="button"
-      tabIndex={0}
       onClick={e => onSelect(folder.id, e.currentTarget)}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onSelect(folder.id, e.currentTarget); }}
+      {...attributes}
+      {...listeners}
     >
-      {/* Drag handle — listeners go here only, keeping click-to-select on the item */}
-      <div
-        className={styles.dragHandle}
-        {...attributes}
-        {...listeners}
-        onClick={e => e.stopPropagation()}
-      >
-        <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-          <circle cx="2.5" cy="2.5" r="1.5"/>
-          <circle cx="7.5" cy="2.5" r="1.5"/>
-          <circle cx="2.5" cy="7"   r="1.5"/>
-          <circle cx="7.5" cy="7"   r="1.5"/>
-          <circle cx="2.5" cy="11.5" r="1.5"/>
-          <circle cx="7.5" cy="11.5" r="1.5"/>
-        </svg>
-      </div>
-
       <div className={styles.preview}>
         {Array.from({ length: 4 }).map((_, i) => {
           const site = previewSites[i];
@@ -132,8 +115,13 @@ function SortableFolder({ folder, isActive, sites, onSelect, onEdit, onDelete, f
         <div className={styles.folderNameRow}>
           <span className={styles.colorDot} style={{ background: folder.color }} />
           <span className={styles.folderName}>{folder.name}</span>
+          {(() => {
+            const total = sites.reduce((s, b) => s + (b.unreadCount ?? 0), 0);
+            return total > 0 ? (
+              <span className={styles.folderUnread}>{total > 99 ? '∞' : total}</span>
+            ) : null;
+          })()}
         </div>
-        <div className={styles.folderCount}>{sites.length} {sites.length === 1 ? 'site' : 'sites'}</div>
       </div>
 
       <FolderMenu folder={folder} onEdit={onEdit} onDelete={onDelete} />
@@ -142,7 +130,7 @@ function SortableFolder({ folder, isActive, sites, onSelect, onEdit, onDelete, f
 }
 
 export default function FolderSidebar({
-  folders, activeFolderId, bookmarksByFolder, onSelectFolder, onNewFolder, onImport,
+  folders, activeFolderId, bookmarksByFolder, onSelectFolder, onNewFolder,
   onEditFolder, onDeleteFolder, onReorderFolders, folderRefs,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -194,7 +182,6 @@ export default function FolderSidebar({
             <div className={`${styles.folderItem} ${styles.dragOverlay}`}
               style={{ '--folder-color': activeFolder.color } as React.CSSProperties}
             >
-              <div className={styles.dragHandle} />
               <div className={styles.folderText}>
                 <div className={styles.folderNameRow}>
                   <span className={styles.colorDot} style={{ background: activeFolder.color }} />
@@ -209,14 +196,6 @@ export default function FolderSidebar({
       <div className={styles.sidebarFooter}>
         <button className={styles.newFolder} onClick={onNewFolder}>
           + New folder
-        </button>
-        <button className={styles.importBtn} onClick={onImport} title="Import bookmarks">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-          Import
         </button>
       </div>
     </div>

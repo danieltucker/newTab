@@ -1,7 +1,15 @@
 import { Router, Request, Response } from 'express';
 import nodeFetch from 'node-fetch';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { isSafeUrl } from '../lib/isSafeUrl';
+
+const execFileAsync = promisify(execFile);
+
+function isValidHost(host: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9.\-]{0,251}[a-zA-Z0-9]?$/.test(host);
+}
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
 
@@ -70,6 +78,38 @@ router.get('/ip', requireAuth, async (req: AuthRequest, res: Response): Promise<
   }
 });
 
+router.get('/ping', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { host } = req.query;
+  if (!host || typeof host !== 'string' || !isValidHost(host)) {
+    res.status(400).json({ error: 'Invalid host' }); return;
+  }
+  const isWin = process.platform === 'win32';
+  const args = isWin ? ['-n', '4', host] : ['-c', '4', host];
+  try {
+    const { stdout } = await execFileAsync('ping', args, { timeout: 15_000 });
+    res.json({ output: stdout });
+  } catch (err: any) {
+    res.json({ output: err.stdout || 'Ping failed.', error: true });
+  }
+});
+
+router.get('/tracert', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { host } = req.query;
+  if (!host || typeof host !== 'string' || !isValidHost(host)) {
+    res.status(400).json({ error: 'Invalid host' }); return;
+  }
+  const isWin = process.platform === 'win32';
+  const [cmd, args] = isWin
+    ? ['tracert', ['-d', '-h', '20', '-w', '500', host]]
+    : ['traceroute', ['-n', '-m', '20', host]];
+  try {
+    const { stdout } = await execFileAsync(cmd, args, { timeout: 35_000 });
+    res.json({ output: stdout });
+  } catch (err: any) {
+    res.json({ output: err.stdout || 'Traceroute failed.', error: true });
+  }
+});
+
 // page-meta requires auth — it fetches arbitrary URLs server-side (SSRF risk if public)
 router.get('/page-meta', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   const { url } = req.query;
@@ -121,5 +161,62 @@ router.get('/page-meta', requireAuth, async (req: AuthRequest, res: Response): P
     res.json({ title: null });
   }
 });
+
+// check-frame requires auth — fetches arbitrary URL headers server-side (SSRF risk if public)
+router.get('/check-frame', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') { res.status(400).json({ error: 'url required' }); return; }
+
+  const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+  if (!(await isSafeUrl(fullUrl))) { res.status(400).json({ error: 'URL not allowed' }); return; }
+
+  try {
+    let headers: nodeFetch.Headers | null = null;
+
+    // Try HEAD first (faster), fall back to GET if server returns 405
+    const headResp = await nodeFetch(fullUrl, {
+      method: 'HEAD',
+      timeout: 5000,
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0)' },
+    } as FetchOptions);
+
+    if (headResp.status === 405) {
+      const getResp = await nodeFetch(fullUrl, {
+        method: 'GET',
+        timeout: 5000,
+        redirect: 'follow',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0)', Range: 'bytes=0-0' },
+      } as FetchOptions);
+      headers = getResp.headers;
+    } else {
+      headers = headResp.headers;
+    }
+
+    const embeddable = !isFrameBlocked(headers);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json({ embeddable });
+  } catch {
+    // Network error — optimistically allow (the iframe itself will show an error)
+    res.json({ embeddable: true });
+  }
+});
+
+function isFrameBlocked(headers: nodeFetch.Headers): boolean {
+  const xfo = headers.get('x-frame-options')?.trim().toUpperCase();
+  if (xfo === 'DENY' || xfo === 'SAMEORIGIN') return true;
+
+  const csp = headers.get('content-security-policy');
+  if (csp) {
+    const m = csp.match(/frame-ancestors\s+([^;]+)/i);
+    if (m) {
+      const val = m[1].trim().toLowerCase();
+      if (val.includes("'none'")) return true;
+      if (!val.includes('*')) return true; // only specific origins allowed, not ours
+    }
+  }
+
+  return false;
+}
 
 export default router;

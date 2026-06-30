@@ -18,28 +18,42 @@ interface Ctx {
 
 type CmdFn = (args: string[], ctx: Ctx) => Promise<string | string[]> | string | string[];
 
+function col(name: string, desc: string): string {
+  return `  ${name.padEnd(12)}${desc}`;
+}
+
 const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
   help: {
     desc: 'List available commands',
     run: () => [
-      'Available commands:',
-      '  ip                   — Your public IP address and location',
-      '  speedtest            — Download speed estimate',
-      '  theme <dark|light|auto> — Switch the UI theme',
-      '  folder <name>        — Switch to a folder by name',
-      '  clear                — Clear the console',
-      '  version              — App version info',
-      '  help                 — Show this list',
+      'Network',
+      col('ip',        'Your public IP address and location'),
+      col('ping',      'ping <host>  — ICMP ping (4 packets)'),
+      col('tracert',   'tracert <host>  — Trace route to host'),
+      col('dns',       'dns <host> [A|AAAA|MX|TXT]  — DNS lookup'),
+      col('speedtest', 'Download speed estimate'),
+      '',
+      'Navigation',
+      col('folder',    'folder <name>  — Switch to a folder'),
+      '',
+      'System',
+      col('theme',     'theme <dark|light|auto>  — Switch UI theme'),
+      col('version',   'App version info'),
+      col('clear',     'Clear the console'),
+      col('help',      'Show this list'),
     ],
   },
+
   version: {
     desc: 'Show app version',
-    run: () => 'newTab v1.0.0',
+    run: () => 'Newt.ab v1.1.0',
   },
+
   clear: {
     desc: 'Clear the console',
     run: () => '__CLEAR__',
   },
+
   ip: {
     desc: 'Show your public IP',
     run: async () => {
@@ -53,6 +67,48 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
       return parts;
     },
   },
+
+  ping: {
+    desc: 'Ping a host',
+    run: async ([host]) => {
+      if (!host) return 'Usage: ping <host>';
+      const res = await apiFetch(`/api/util/ping?host=${encodeURIComponent(host)}`);
+      if (!res.ok) return 'Could not reach server.';
+      const d = await res.json() as { output: string; error?: boolean };
+      return d.output.trim().split('\n').filter(l => l.trim());
+    },
+  },
+
+  tracert: {
+    desc: 'Trace route to a host',
+    run: async ([host]) => {
+      if (!host) return 'Usage: tracert <host>';
+      const res = await apiFetch(`/api/util/tracert?host=${encodeURIComponent(host)}`);
+      if (!res.ok) return 'Could not reach server.';
+      const d = await res.json() as { output: string; error?: boolean };
+      return d.output.trim().split('\n').filter(l => l.trim());
+    },
+  },
+
+  dns: {
+    desc: 'DNS lookup',
+    run: async (args) => {
+      const host = args[0];
+      const type = (args[1] ?? 'A').toUpperCase();
+      if (!host) return 'Usage: dns <host> [A|AAAA|MX|TXT|CNAME]';
+      const validTypes = ['A', 'AAAA', 'MX', 'TXT', 'CNAME', 'NS', 'PTR'];
+      if (!validTypes.includes(type)) return `Unknown type "${type}". Valid: ${validTypes.join(', ')}`;
+      const res = await fetch(
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${encodeURIComponent(type)}`,
+        { headers: { Accept: 'application/dns-json' } }
+      );
+      if (!res.ok) return 'DNS lookup failed.';
+      const d = await res.json() as { Answer?: Array<{ data: string; TTL: number }>; Status: number };
+      if (!d.Answer?.length) return `No ${type} records found for ${host}`;
+      return d.Answer.map(r => `${r.data.padEnd(48)}TTL ${r.TTL}s`);
+    },
+  },
+
   speedtest: {
     desc: 'Estimate download speed',
     run: async () => {
@@ -69,8 +125,9 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
       }
     },
   },
+
   theme: {
-    desc: 'Switch theme: theme <dark|light|auto>',
+    desc: 'Switch theme',
     run: (args, { theme, onSetTheme }) => {
       const target = args[0]?.toLowerCase() as 'dark' | 'light' | 'auto' | undefined;
       if (target !== 'dark' && target !== 'light' && target !== 'auto') {
@@ -81,15 +138,18 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
       return target === 'auto' ? 'Switched to auto (system) theme.' : `Switched to ${target} theme.`;
     },
   },
+
   folder: {
-    desc: 'Switch folder: folder <name>',
+    desc: 'Switch folder',
     run: (args, { folders, onSelectFolder }) => {
       const name = args.join(' ').toLowerCase();
-      if (!name) return 'Usage: folder <name>';
-      const match = folders.find(f => f.name.toLowerCase() === name);
+      if (!name) {
+        return ['Usage: folder <name>', 'Available: ' + folders.map(f => f.name).join(', ')];
+      }
+      const match = folders.find(f => f.name.toLowerCase() === name)
+        ?? folders.find(f => f.name.toLowerCase().startsWith(name));
       if (!match) {
-        const names = folders.map(f => `  ${f.name}`).join('\n');
-        return [`Folder "${args.join(' ')}" not found. Available:`, names];
+        return [`"${args.join(' ')}" not found.`, 'Available: ' + folders.map(f => f.name).join(', ')];
       }
       onSelectFolder(match.id);
       return `Switched to "${match.name}"`;
@@ -121,14 +181,10 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); }, []);
 
   useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
+    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [lines]);
 
   const push = useCallback((text: string | string[], kind: Line['kind'] = 'output') => {
@@ -151,7 +207,8 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
     const [cmd, ...args] = trimmed.split(/\s+/);
     const def = COMMANDS[cmd.toLowerCase()];
     if (!def) {
-      push(`Command not found: "${cmd}". Type "help" for a list.`, 'error');
+      const hint = CMD_NAMES.find(c => c.startsWith(cmd.toLowerCase()[0]));
+      push(`Command not found: "${cmd}".${hint ? ` Did you mean "${hint}"?` : ' Type "help".'}`, 'error');
       return;
     }
 
@@ -206,7 +263,7 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
       <div className={styles.console} onClick={e => e.stopPropagation()}>
 
         <div className={styles.header}>
-          <span className={styles.headerTitle}>NEWTAB CONSOLE</span>
+          <span className={styles.headerTitle}>NEWT.AB CONSOLE</span>
           <span className={styles.headerHints}>
             <kbd>`</kbd>to close
             <span className={styles.dot}>·</span>
@@ -216,20 +273,20 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
           </span>
         </div>
 
-        <div className={styles.output} ref={outputRef} onClick={() => inputRef.current?.focus()}>
+        <div className={styles.outputArea} ref={outputRef} onClick={() => inputRef.current?.focus()}>
           {lines.map(line => (
-            <div key={line.id} className={`${styles.line} ${styles[line.kind]}`}>
+            <div key={line.id} className={styles.line} data-kind={line.kind}>
               {line.text}
             </div>
           ))}
-          {running && <div className={`${styles.line} ${styles.info}`}>Running…</div>}
+          {running && <div className={styles.line} data-kind="info">Running…</div>}
         </div>
 
         <div className={styles.inputRow}>
-          <span className={styles.prompt}>$</span>
+          <span className={styles.promptSymbol}>$</span>
           <input
             ref={inputRef}
-            className={styles.input}
+            className={styles.textInput}
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -241,7 +298,6 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
             placeholder={running ? '' : 'type a command…'}
           />
         </div>
-
 
       </div>
     </div>

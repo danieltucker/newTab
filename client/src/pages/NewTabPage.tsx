@@ -12,14 +12,25 @@ import EditBookmarkModal from '../components/EditBookmarkModal';
 import EditFolderModal from '../components/EditFolderModal';
 import SettingsModal from '../components/SettingsModal';
 import ImportBookmarksModal from '../components/ImportBookmarksModal';
+import ArticleModal from '../components/ArticleModal';
 import Console from '../components/Console';
+import FolderArticles from '../components/FolderArticles';
+import SaveArticleModal from '../components/SaveArticleModal';
 import { useFolders } from '../hooks/useFolders';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useReadingList } from '../hooks/useReadingList';
 import { useSettings } from '../hooks/useSettings';
 import { apiGet } from '../services/api';
-import { Bookmark, Folder } from '../types';
+import { Bookmark, Folder, FeedArticle } from '../types';
 import { ThemeSetting, ResolvedTheme } from '../App';
+
+const GRADIENTS: Record<string, { dark: string; light: string }> = {
+  aurora:   { dark: 'radial-gradient(ellipse 70% 55% at 15% 5%, rgba(32,200,160,0.2) 0%, transparent 55%), radial-gradient(ellipse 60% 50% at 85% 90%, rgba(100,50,210,0.16) 0%, transparent 55%)', light: 'radial-gradient(ellipse 70% 55% at 15% 5%, rgba(0,160,130,0.12) 0%, transparent 55%), radial-gradient(ellipse 60% 50% at 85% 90%, rgba(100,50,210,0.09) 0%, transparent 55%)' },
+  dusk:     { dark: 'radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,80,20,0.18) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 15% 95%, rgba(180,40,200,0.14) 0%, transparent 55%)', light: 'radial-gradient(ellipse 80% 55% at 50% 0%, rgba(220,70,10,0.1) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 15% 95%, rgba(150,30,180,0.08) 0%, transparent 55%)' },
+  ocean:    { dark: 'radial-gradient(ellipse 80% 65% at 30% 20%, rgba(0,150,255,0.18) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 75% 80%, rgba(0,210,180,0.12) 0%, transparent 55%)', light: 'radial-gradient(ellipse 80% 65% at 30% 20%, rgba(0,120,220,0.11) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 75% 80%, rgba(0,180,160,0.08) 0%, transparent 55%)' },
+  midnight: { dark: 'radial-gradient(ellipse 100% 65% at 50% 0%, rgba(110,55,210,0.22) 0%, transparent 65%), radial-gradient(ellipse 60% 50% at 85% 85%, rgba(60,0,160,0.14) 0%, transparent 55%)', light: 'radial-gradient(ellipse 100% 65% at 50% 0%, rgba(90,40,180,0.1) 0%, transparent 65%), radial-gradient(ellipse 60% 50% at 85% 85%, rgba(60,0,140,0.07) 0%, transparent 55%)' },
+  rose:     { dark: 'radial-gradient(ellipse 70% 55% at 82% 8%, rgba(255,80,130,0.18) 0%, transparent 55%), radial-gradient(ellipse 60% 55% at 18% 88%, rgba(255,140,50,0.12) 0%, transparent 55%)', light: 'radial-gradient(ellipse 70% 55% at 82% 8%, rgba(220,60,110,0.11) 0%, transparent 55%), radial-gradient(ellipse 60% 55% at 18% 88%, rgba(200,120,30,0.08) 0%, transparent 55%)' },
+};
 
 interface Props {
   accessToken: string;
@@ -104,14 +115,53 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
       .forEach(b => checkFeed(b.id).catch(() => {}));
   }, [bookmarks, activeFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Feed articles for search (accumulated across folder switches)
+  const [feedArticles, setFeedArticles] = useState<FeedArticle[]>([]);
+
+  function handleFeedArticlesLoaded(articles: FeedArticle[]) {
+    setFeedArticles(prev => {
+      const existingIds = new Set(prev.map(a => a.id));
+      const fresh = articles.filter(a => !existingIds.has(a.id));
+      return fresh.length ? [...prev, ...fresh] : prev;
+    });
+  }
+
+  // Pending feed article save (shows SaveArticleModal)
+  type PendingSave = { id: string; url: string; title: string; source: string; markSaved: () => void };
+  const [savingArticle, setSavingArticle] = useState<PendingSave | null>(null);
+
+  // Bookmarklet mode — true when this window was opened by a bookmarklet
+  const bookmarkletModeRef = useRef(false);
+  const [bookmarkletAddUrl, setBookmarkletAddUrl] = useState('');
+
   // Modal state
   const [showAddLink, setShowAddLink] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [articleUrl, setArticleUrl] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+
+  // Detect bookmarklet intent from URL params (set before React renders)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const intent = params.get('intent');
+    if (!intent) return;
+    bookmarkletModeRef.current = true;
+    const url = decodeURIComponent(params.get('url') ?? '');
+    const title = decodeURIComponent(params.get('title') ?? '');
+    window.history.replaceState({}, '', window.location.pathname);
+    if (intent === 'save-article') {
+      let source = '';
+      try { source = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+      setSavingArticle({ id: '', url, title, source, markSaved: () => { if (window.opener) window.close(); } });
+    } else if (intent === 'add-bookmark') {
+      setBookmarkletAddUrl(url);
+      setShowAddLink(true);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Backtick opens the console (when consoleEnabled in settings)
   useEffect(() => {
@@ -219,7 +269,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     }
   }
 
-  async function handleSaveFolder(id: string, updates: { name: string; color: string }) {
+  async function handleSaveFolder(id: string, updates: { name: string; color: string; feedUrls: string[] }) {
     await updateFolder(id, updates);
   }
 
@@ -236,8 +286,12 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     }
   }
 
+  const gradientStyle = settings.backgroundGradient && settings.backgroundGradient !== 'none'
+    ? { backgroundImage: GRADIENTS[settings.backgroundGradient]?.[resolvedTheme] ?? '' }
+    : undefined;
+
   return (
-    <div className={styles.page}>
+    <div className={styles.page} style={gradientStyle}>
       <div className={styles.content}>
       {/* Top-right bar: username + icon buttons */}
       <div className={styles.topBar}>
@@ -266,22 +320,28 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
             searchNewTab={settings.searchNewTab}
             bookmarks={Object.values(bookmarksByFolder).flat()}
             readingItems={readingList}
+            feedArticles={feedArticles.map(a => ({ id: a.id, url: a.link, title: a.title, source: a.source }))}
           />
         </div>
 
         <div className={styles.bodyGrid}>
-          <FolderSidebar
-            folders={folders}
-            activeFolderId={activeFolderId}
-            bookmarksByFolder={bookmarksByFolder}
-            onSelectFolder={handleSelectFolder}
-            onNewFolder={() => setShowNewFolder(true)}
-            onImport={() => setShowImport(true)}
-            onEditFolder={setEditingFolder}
-            onDeleteFolder={handleDeleteFolder}
-            onReorderFolders={reorderFolders}
-            folderRefs={folderRefs}
-          />
+          <div className={styles.leftCol}>
+            <FolderSidebar
+              folders={folders}
+              activeFolderId={activeFolderId}
+              bookmarksByFolder={bookmarksByFolder}
+              onSelectFolder={handleSelectFolder}
+              onNewFolder={() => setShowNewFolder(true)}
+              onEditFolder={setEditingFolder}
+              onDeleteFolder={handleDeleteFolder}
+              onReorderFolders={reorderFolders}
+              folderRefs={folderRefs}
+            />
+            <Widgets
+              settings={settings}
+              onUpdateSettings={updateSetting}
+            />
+          </div>
 
           <div>
             <BookmarksGrid
@@ -293,28 +353,52 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
               onEditBookmark={setEditingBookmark}
               onDeleteBookmark={handleDeleteBookmark}
               onVisit={markVisited}
+              bookmarkOpenMode={settings.bookmarkOpenMode}
             />
-            <ReadingList
-              items={readingList}
-              onSave={saveItem}
-              onUpdate={updateItem}
-              onArchive={archiveItem}
-              onDelete={removeItem}
-            />
-          </div>
-
-          <div className={styles.widgetsCol}>
-            <Widgets settings={settings} onUpdateSettings={updateSetting} />
+            <div className={styles.bottomRow}>
+              <ReadingList
+                items={readingList}
+                onSave={saveItem}
+                onUpdate={updateItem}
+                onArchive={archiveItem}
+                onDelete={removeItem}
+                articleOpenMode={(() => {
+                const m = settings.readingListOpenMode ?? settings.articleOpenMode;
+                return m === 'reader' ? 'iframe' : m;
+              })()}
+                onOpenArticle={setArticleUrl}
+              />
+            </div>
+            {activeFolderId && (activeFolder?.feedUrls?.length ?? 0) > 0 && (
+              <FolderArticles
+                key={activeFolderId}
+                folderId={activeFolderId}
+                bookmarks={activeFolderId ? (bookmarksByFolder[activeFolderId] ?? []) : []}
+                onSaveArticle={(a, markSaved) => setSavingArticle({ ...a, markSaved })}
+                onArticlesLoaded={handleFeedArticlesLoaded}
+              />
+            )}
           </div>
         </div>
+
+        <footer className={styles.footer}>
+          <a href="https://github.com/danieltucker/newTab" target="_blank" rel="noopener noreferrer" className={styles.footerLink}>
+            v1.1.0
+          </a>
+        </footer>
       </div>
 
       {showAddLink && (
         <AddLinkModal
           folders={folders}
           defaultFolderId={activeFolderId}
+          defaultUrl={bookmarkletAddUrl || undefined}
           onAdd={handleAddLink}
-          onClose={() => setShowAddLink(false)}
+          onClose={() => {
+            setShowAddLink(false);
+            setBookmarkletAddUrl('');
+            if (bookmarkletModeRef.current && window.opener) window.close();
+          }}
         />
       )}
 
@@ -338,6 +422,9 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
       {editingFolder && (
         <EditFolderModal
           folder={editingFolder}
+          bookmarkFeeds={(bookmarksByFolder[editingFolder.id] ?? [])
+            .filter(b => !!b.feedUrl)
+            .map(b => ({ name: b.name, domain: b.domain, feedUrl: b.feedUrl! }))}
           onSave={handleSaveFolder}
           onDelete={handleDeleteFolder}
           onClose={() => setEditingFolder(null)}
@@ -364,11 +451,34 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
         />
       )}
 
+      {savingArticle && (
+        <SaveArticleModal
+          url={savingArticle.url}
+          title={savingArticle.title}
+          source={savingArticle.source}
+          onSave={async data => {
+            await saveItem(data);
+            savingArticle.markSaved();
+            setSavingArticle(null);
+            if (bookmarkletModeRef.current && window.opener) window.close();
+          }}
+          onClose={() => {
+            setSavingArticle(null);
+            if (bookmarkletModeRef.current && window.opener) window.close();
+          }}
+        />
+      )}
+
+      {articleUrl && (
+        <ArticleModal url={articleUrl} onClose={() => setArticleUrl(null)} />
+      )}
+
       {showSettings && (
         <SettingsModal
           settings={{ ...settings, theme: themeSetting }}
           onUpdate={async (patch) => { if (patch.theme) handleSetTheme(patch.theme); await updateSetting(patch); }}
           onClose={() => setShowSettings(false)}
+          onImport={() => { setShowSettings(false); setShowImport(true); }}
         />
       )}
 

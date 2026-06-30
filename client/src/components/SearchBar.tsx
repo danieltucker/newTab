@@ -8,6 +8,16 @@ const SEARCH_URLS: Record<string, (q: string) => string> = {
   brave:      q => `https://search.brave.com/search?q=${q}`,
 };
 
+// Slash shortcuts: /g → Google, /d → DuckDuckGo, /b → Bing, /br → Brave, /a → Claude
+// Longer prefixes listed first so /br is matched before /b
+const SHORTCUTS = [
+  { prefix: '/br', engine: 'Brave',      url: (q: string) => `https://search.brave.com/search?q=${encodeURIComponent(q)}` },
+  { prefix: '/g',  engine: 'Google',     url: (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}` },
+  { prefix: '/d',  engine: 'DuckDuckGo', url: (q: string) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}` },
+  { prefix: '/b',  engine: 'Bing',       url: (q: string) => `https://www.bing.com/search?q=${encodeURIComponent(q)}` },
+  { prefix: '/c',  engine: 'Claude',     url: (q: string) => `https://claude.ai/new?q=${encodeURIComponent(q)}` },
+];
+
 function isUrl(s: string): boolean {
   const trimmed = s.trim();
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return true;
@@ -33,13 +43,15 @@ type Suggestion =
   | { kind: 'bookmark'; id: string; name: string; domain: string; faviconUrl: string }
   | { kind: 'article';  id: string; title: string; source: string; url: string }
   | { kind: 'search';   text: string; url: string }
-  | { kind: 'url';      text: string; url: string };
+  | { kind: 'url';      text: string; url: string }
+  | { kind: 'shortcut'; text: string; url: string; engine: string };
 
 interface Props {
   searchEngine?: string;
   searchNewTab?: boolean;
   bookmarks?: BookmarkHint[];
   readingItems?: ArticleHint[];
+  feedArticles?: ArticleHint[];
 }
 
 export default function SearchBar({
@@ -47,6 +59,7 @@ export default function SearchBar({
   searchNewTab = false,
   bookmarks = [],
   readingItems = [],
+  feedArticles = [],
 }: Props) {
   const [value, setValue] = useState('');
   const [open, setOpen] = useState(false);
@@ -54,9 +67,17 @@ export default function SearchBar({
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const suggestions = useMemo<Suggestion[]>(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return [];
+    const raw = value.trim();
+    if (!raw) return [];
 
+    // Check for slash shortcut: /g query, /a query, etc.
+    const shortcut = SHORTCUTS.find(s => raw.startsWith(s.prefix + ' '));
+    if (shortcut) {
+      const query = raw.slice(shortcut.prefix.length).trim();
+      if (query) return [{ kind: 'shortcut', text: query, url: shortcut.url(query), engine: shortcut.engine }];
+    }
+
+    const q = raw.toLowerCase();
     const results: Suggestion[] = [];
 
     bookmarks
@@ -69,7 +90,11 @@ export default function SearchBar({
       .slice(0, 3)
       .forEach(a => results.push({ kind: 'article', id: a.id, title: a.title, source: a.source, url: a.url }));
 
-    const raw = value.trim();
+    feedArticles
+      .filter(a => a.title.toLowerCase().includes(q) || a.source.toLowerCase().includes(q))
+      .slice(0, 4)
+      .forEach(a => results.push({ kind: 'article', id: `feed-${a.id}`, title: a.title, source: a.source, url: a.url }));
+
     if (isUrl(raw)) {
       results.push({ kind: 'url', text: raw, url: raw.startsWith('http') ? raw : `https://${raw}` });
     } else {
@@ -78,7 +103,7 @@ export default function SearchBar({
     }
 
     return results;
-  }, [value, bookmarks, readingItems, searchEngine]);
+  }, [value, bookmarks, readingItems, feedArticles, searchEngine]);
 
   function navigate(url: string) {
     if (searchNewTab) {
@@ -107,6 +132,12 @@ export default function SearchBar({
     }
     const q = value.trim();
     if (!q) return;
+    // Check slash shortcuts on submit too (e.g. Enter pressed without selecting a suggestion)
+    const shortcut = SHORTCUTS.find(s => q.startsWith(s.prefix + ' '));
+    if (shortcut) {
+      navigate(shortcut.url(q.slice(shortcut.prefix.length).trim()));
+      return;
+    }
     const url = isUrl(q)
       ? (q.startsWith('http') ? q : `https://${q}`)
       : (SEARCH_URLS[searchEngine] ?? SEARCH_URLS.google)(encodeURIComponent(q));
@@ -207,6 +238,16 @@ export default function SearchBar({
                 <div className={styles.resultText}>
                   <span className={styles.resultLabel}>Go to <strong>{item.text}</strong></span>
                 </div>
+              </div>
+            );
+            if (item.kind === 'shortcut') return (
+              <div key="shortcut" className={`${styles.result} ${sel ? styles.resultSel : ''}`}
+                onMouseDown={() => handleMouseDown(item)} onMouseEnter={() => setSelectedIndex(i)}>
+                <div className={styles.resultIconWrap}><IconSearch /></div>
+                <div className={styles.resultText}>
+                  <span className={styles.resultLabel}>Search <strong>{item.engine}</strong> for <strong>{item.text}</strong></span>
+                </div>
+                <span className={styles.badge}>{item.engine}</span>
               </div>
             );
             return (

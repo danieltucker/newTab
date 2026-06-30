@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { setAccessToken, apiFetch } from '../services/api';
 
 interface AuthState {
@@ -9,9 +9,13 @@ interface AuthState {
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({ accessToken: null, username: null, loading: true });
+  const refreshAttempted = useRef(false);
 
-  // Try to restore session on mount
+  // Restore session on mount. Guard ref prevents the double-invoke in React Strict Mode
+  // from racing with the server's refresh token rotation (second call would get 401).
   useEffect(() => {
+    if (refreshAttempted.current) return;
+    refreshAttempted.current = true;
     fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(data => {

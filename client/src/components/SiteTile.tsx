@@ -11,13 +11,12 @@ interface Props {
   onEdit?: (b: Bookmark) => void;
   onDelete?: (id: string) => void;
   onVisit?: (id: string) => void;
+  openMode?: 'same-tab' | 'new-tab';
 }
 
-export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVisit }: Props) {
-  const hasNewContent = !!bookmark.feedLatestAt && (
-    !bookmark.lastVisitedAt ||
-    new Date(bookmark.feedLatestAt) > new Date(bookmark.lastVisitedAt)
-  );
+export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVisit, openMode = 'same-tab' }: Props) {
+  const unreadCount = bookmark.unreadCount ?? 0;
+  const hasNewContent = unreadCount > 0;
   const [faviconFailed, setFaviconFailed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const tileRef = useRef<HTMLAnchorElement>(null);
@@ -75,6 +74,7 @@ export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVi
       className={styles.tile}
       style={style}
       onClick={handleClick}
+      {...(openMode === 'new-tab' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
       {...attributes}
       {...listeners}
     >
@@ -92,7 +92,11 @@ export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVi
             />
           )}
         </div>
-        {hasNewContent && <span className={styles.feedDot} />}
+        {hasNewContent && (
+          <span className={styles.feedBadge}>
+            {unreadCount > 99 ? '∞' : unreadCount}
+          </span>
+        )}
       </div>
       <span className={styles.name}>{bookmark.name}</span>
 

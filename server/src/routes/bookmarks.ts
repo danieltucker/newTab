@@ -44,17 +44,19 @@ function isFeedXml(text: string): boolean {
     (text.includes('<item') || text.includes('<entry') || text.includes('<channel'));
 }
 
-function parseFeedDate(xml: string): Date | null {
-  // First <item> or <entry> date
-  const item = xml.match(/<item[\s>][\s\S]*?<pubDate>([^<]+)<\/pubDate>/i)
-    ?? xml.match(/<entry[\s>][\s\S]*?<updated>([^<]+)<\/updated>/i);
-  if (item) { const d = new Date(item[1].trim()); if (!isNaN(d.getTime())) return d; }
-  // Channel/feed-level fallback
-  const chan = xml.match(/<lastBuildDate>([^<]+)<\/lastBuildDate>/i)
-    ?? xml.match(/<pubDate>([^<]+)<\/pubDate>/i)
-    ?? xml.match(/<updated>([^<]+)<\/updated>/i);
-  if (chan) { const d = new Date(chan[1].trim()); if (!isNaN(d.getTime())) return d; }
-  return null;
+function parseFeedDates(xml: string): Date[] {
+  const dates: Date[] = [];
+  const isAtom = xml.includes('<feed') && (xml.includes('<entry>') || xml.includes('<entry '));
+  const itemRe = isAtom ? /<entry[\s>]([\s\S]*?)<\/entry>/gi : /<item[\s>]([\s\S]*?)<\/item>/gi;
+  let m;
+  while ((m = itemRe.exec(xml)) !== null) {
+    const e = m[1];
+    const raw = isAtom
+      ? (e.match(/<updated>([\s\S]*?)<\/updated>/i)?.[1] ?? e.match(/<published>([\s\S]*?)<\/published>/i)?.[1])
+      : (e.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] ?? e.match(/<dc:date>([\s\S]*?)<\/dc:date>/i)?.[1]);
+    if (raw) { const d = new Date(raw.trim()); if (!isNaN(d.getTime())) dates.push(d); }
+  }
+  return dates;
 }
 
 async function discoverFeed(domain: string): Promise<string | null> {
@@ -202,19 +204,24 @@ router.post('/:id/check-feed', async (req: AuthRequest, res: Response): Promise<
   if (!bookmark) { res.status(404).json({ error: 'Not found' }); return; }
 
   let feedUrl = bookmark.feedUrl ?? null;
-
-  // Discover if unknown
   if (!feedUrl) feedUrl = await discoverFeed(bookmark.domain);
 
-  // Fetch and parse feed
   let feedLatestAt: Date | undefined;
+  let unreadDelta = 0;
+
   if (feedUrl) {
     const xml = await fetchXml(feedUrl);
     if (xml && isFeedXml(xml)) {
-      const d = parseFeedDate(xml);
-      if (d) feedLatestAt = d;
+      const dates = parseFeedDates(xml);
+      if (dates.length > 0) {
+        feedLatestAt = new Date(Math.max(...dates.map(d => d.getTime())));
+        if (bookmark.feedLatestAt) {
+          const since = new Date(bookmark.feedLatestAt);
+          unreadDelta = dates.filter(d => d > since).length;
+        }
+      }
     } else {
-      feedUrl = null; // URL turned out to not be a real feed
+      feedUrl = null;
     }
   }
 
@@ -224,6 +231,7 @@ router.post('/:id/check-feed', async (req: AuthRequest, res: Response): Promise<
       feedUrl,
       feedCheckedAt: new Date(),
       ...(feedLatestAt && { feedLatestAt }),
+      ...(unreadDelta > 0 && { unreadCount: Math.min(bookmark.unreadCount + unreadDelta, 100) }),
     },
   });
   res.json(updated);
@@ -234,7 +242,7 @@ router.post('/:id/visited', async (req: AuthRequest, res: Response): Promise<voi
   if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
   await prisma.bookmark.update({
     where: { id: req.params.id },
-    data: { lastVisitedAt: new Date() },
+    data: { lastVisitedAt: new Date(), unreadCount: 0 },
   });
   res.json({ ok: true });
 });

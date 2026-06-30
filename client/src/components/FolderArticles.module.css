@@ -1,0 +1,285 @@
+.wrap {
+  margin-top: 26px;
+}
+
+.sectionLabel {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.count {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  color: var(--muted);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Category filter chips ── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  padding: 3px 11px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chipActive {
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface2));
+  border-color: color-mix(in oklab, var(--accent) 50%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Column layout — masonry, cols auto-size from container ── */
+.grid {
+  column-width: 200px;
+  column-gap: 12px;
+}
+
+/* ── Card wrap — lifts on hover ── */
+.cardWrap {
+  position: relative;
+  break-inside: avoid;
+  margin-bottom: 12px;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.cardWrap:hover {
+  transform: translateY(-3px);
+}
+
+/* ── Action buttons — top-right, visible on hover ── */
+.cardActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 2;
+}
+
+.cardWrap:hover .cardActions {
+  opacity: 1;
+}
+
+.actionBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface2);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.saveBtn:hover {
+  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
+  color: var(--accent);
+}
+
+.savedBtn {
+  color: #1DB954;
+  background: color-mix(in oklab, #1DB954 12%, var(--surface2));
+  cursor: default;
+}
+
+.dismissBtn:hover {
+  background: color-mix(in oklab, #FF4500 15%, var(--surface2));
+  color: #FF4500;
+}
+
+/* ── Card ── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: box-shadow 0.2s, border-color 0.15s;
+}
+
+.cardWrap:hover .card {
+  box-shadow: 0 12px 28px var(--shadow);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+/* ── Category chips ── */
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cat {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent);
+  border-radius: 20px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.title {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.35;
+  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.12s;
+}
+
+.title:hover { color: var(--accent); }
+
+/* ── Bottom row: favicon+domain on left, readTime+date on right ── */
+.cardBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.favicon {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.domain {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.readTime {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.55;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.date {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.45;
+  white-space: nowrap;
+}
+
+/* ── Load more ── */
+.moreBtn {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  text-align: center;
+}
+
+.moreBtn:hover { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+.moreBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Status ── */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 2px 0;
+}
+
+.statusError { font-size: 13px; color: #e44; padding: 2px 0; }
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 460px) {
+  .grid { columns: 2; column-width: auto; }
+}

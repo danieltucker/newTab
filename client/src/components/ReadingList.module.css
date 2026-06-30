@@ -191,6 +191,78 @@
   border-style: dashed;
 }
 
+/* ── Soft delete ghost state ── */
+.pendingDelete {
+  pointer-events: none;
+}
+
+.pendingDelete .card {
+  opacity: 0.07;
+}
+
+.ghostOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 14px;
+  border: 1.5px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  pointer-events: all;
+}
+
+.ghostCenter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ghostLabel {
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.7;
+  font-family: 'Hanken Grotesk', sans-serif;
+}
+
+.undoBtn {
+  padding: 4px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.undoBtn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.countdownBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: color-mix(in oklab, var(--accent) 55%, transparent);
+  animation: countdownShrink 3s linear forwards;
+  transform-origin: left center;
+}
+
+@keyframes countdownShrink {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
 /* ── Card action buttons ── */
 .cardActions {
   position: absolute;
@@ -252,7 +324,7 @@
 }
 
 .grid {
-  columns: 2;
+  column-width: 200px;
   column-gap: 12px;
 }
 
@@ -344,8 +416,6 @@
   padding: 16px 0;
 }
 
-@media (max-width: 900px) {
-  .grid {
-    columns: 1;
-  }
+@media (max-width: 460px) {
+  .grid { columns: 2; column-width: auto; }
 }

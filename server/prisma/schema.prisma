@@ -18,6 +18,7 @@ model User {
   bookmarks     Bookmark[]
   readingList   ReadingListItem[]
   refreshTokens RefreshToken[]
+  feedArticles  FeedArticle[]
 }
 
 model RefreshToken {
@@ -30,14 +31,38 @@ model RefreshToken {
 }
 
 model Folder {
-  id        String     @id @default(cuid())
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  color             String
+  position          Int
+  feedUrls          String[]      @default([])
+  feedLastCheckedAt DateTime?
+  backgroundImage   String?
+  bookmarks         Bookmark[]
+  feedArticles      FeedArticle[]
+  createdAt         DateTime      @default(now())
+}
+
+model FeedArticle {
+  id        String    @id @default(cuid())
   userId    String
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  color     String
-  position  Int
-  bookmarks Bookmark[]
-  createdAt DateTime   @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId  String
+  folder    Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  feedUrl   String
+  title     String
+  link      String
+  source    String
+  pubDate    DateTime?
+  fetchedAt  DateTime  @default(now())
+  dismissed  Boolean   @default(false)
+  readTime   Int?
+  categories String[]  @default([])
+
+  @@unique([folderId, link])
+  @@index([folderId])
 }
 
 model Bookmark {
@@ -54,6 +79,7 @@ model Bookmark {
   feedUrl       String?
   feedCheckedAt DateTime?
   feedLatestAt  DateTime?
+  unreadCount   Int       @default(0)
   lastVisitedAt DateTime?
   createdAt     DateTime  @default(now())
 }

@@ -57,7 +57,7 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
   }, []);
 
   const markVisited = useCallback(async (id: string) => {
-    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, lastVisitedAt: new Date().toISOString() } : b));
+    setBookmarks(prev => prev.map(b => b.id === id ? { ...b, lastVisitedAt: new Date().toISOString(), unreadCount: 0 } : b));
     apiFetch(`/api/bookmarks/${id}/visited`, { method: 'POST' }).catch(() => {});
   }, []);
 

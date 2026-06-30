@@ -88,9 +88,10 @@ interface Props {
   unit: 'celsius' | 'fahrenheit';
   onSetLocation: (loc: string) => void;
   onSetUnit: (unit: 'celsius' | 'fahrenheit') => void;
+  onRemove?: () => void;
 }
 
-export default function WeatherCard({ location, unit, onSetLocation, onSetUnit }: Props) {
+export default function WeatherCard({ location, unit, onSetLocation, onSetUnit, onRemove }: Props) {
   const [data, setData] = useState<WeatherResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +167,16 @@ export default function WeatherCard({ location, unit, onSetLocation, onSetUnit }
   if (!location && !editing) {
     return (
       <div className={styles.card}>
-        <div className={styles.cardLabel}><span>Weather</span></div>
+        <div className={styles.cardLabel}>
+          <span>Weather</span>
+          {onRemove && (
+            <button className={styles.removeBtn} onClick={onRemove} title="Remove widget" style={{ marginLeft: 'auto' }}>
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M1 1l10 10M11 1L1 11"/>
+              </svg>
+            </button>
+          )}
+        </div>
         <div className={styles.empty}>
           <button className={styles.setLocationBtn} onClick={() => setEditing(true)}>
             Set location to see weather
@@ -181,6 +191,13 @@ export default function WeatherCard({ location, unit, onSetLocation, onSetUnit }
       <div className={styles.cardLabel}>
         <span>Weather</span>
         {data && !editing && <WeatherIcon code={data.code} />}
+        {onRemove && (
+          <button className={styles.removeBtn} onClick={onRemove} title="Remove widget" style={{ marginLeft: 'auto' }}>
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M1 1l10 10M11 1L1 11"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       {editing ? (

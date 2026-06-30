@@ -1,3 +1,8 @@
+.wideCard {
+  width: 460px !important;
+  max-width: 95vw;
+}
+
 .actionsRow {
   display: flex;
   align-items: center;
@@ -66,3 +71,145 @@
   font-size: 13px;
   cursor: pointer;
 }
+
+/* ── Feed list ────────────────────────── */
+.feedList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.feedItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface2));
+  border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent);
+  border-radius: 8px;
+  padding: 6px 8px 6px 12px;
+}
+
+.feedLabel {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedRemove {
+  background: none;
+  border: none;
+  padding: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: color 0.12s;
+  flex-shrink: 0;
+}
+
+.feedRemove:hover { color: #e44; }
+
+/* ── Bookmark feed suggestions ─────────── */
+.suggestions {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.sugLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 6px 12px 4px;
+  opacity: 0.6;
+}
+
+.sugItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.sugItem:hover { background: var(--surface2); }
+
+.sugName {
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sugDomain {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.sugAdd {
+  font-size: 16px;
+  font-weight: 300;
+  color: var(--accent);
+  width: 14px;
+  text-align: center;
+  line-height: 1;
+}
+
+/* ── Add feed form ─────────────────────── */
+.feedForm {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.feedInput {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+
+.feedInput:focus { border-color: var(--accent); }
+.feedInput::placeholder { color: var(--muted); opacity: 0.45; }
+
+.feedAdd {
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.feedAdd:hover { opacity: 0.85; }
+.feedAdd:disabled { opacity: 0.35; cursor: default; }

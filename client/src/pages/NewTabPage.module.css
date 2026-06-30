@@ -6,7 +6,7 @@
 .content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 48px 32px 64px;
+  padding: 0 32px 64px;
 }
 
 .header {
@@ -20,10 +20,21 @@
 .bodyGrid {
   margin-top: 28px;
   display: grid;
-  grid-template-columns: 212px minmax(0, 1fr) 290px;
+  grid-template-columns: 248px minmax(0, 1fr);
   gap: 26px;
   align-items: start;
   animation: rise 0.48s 0.12s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.leftCol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.bottomRow {
+  margin-top: 26px;
 }
 
 .topBar {
@@ -64,6 +75,27 @@
   background: var(--surface2);
 }
 
+/* ── Footer ── */
+.footer {
+  margin-top: 48px;
+  padding-bottom: 16px;
+  text-align: center;
+}
+
+.footerLink {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.35;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.04em;
+}
+
+.footerLink:hover {
+  opacity: 0.75;
+}
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .content {
@@ -73,10 +105,5 @@
   .bodyGrid {
     grid-template-columns: 1fr;
     gap: 20px;
-  }
-
-  /* On mobile, widgets column moves below reading list via order */
-  .widgetsCol {
-    order: 3;
   }
 }
