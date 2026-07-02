@@ -1,5 +1,10 @@
 import jwt from 'jsonwebtoken';
 
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_ACCESS_SECRET)  throw new Error('JWT_ACCESS_SECRET must be set in production');
+  if (!process.env.JWT_REFRESH_SECRET) throw new Error('JWT_REFRESH_SECRET must be set in production');
+}
+
 const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'change-me-access';
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'change-me-refresh';
 const TOTP_PENDING_SECRET = (process.env.JWT_ACCESS_SECRET || 'change-me-access') + '-totp-pending';

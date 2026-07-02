@@ -20,7 +20,7 @@ export default function ArticleModal({ url, onClose }: Props) {
   // Server-side header check — more reliable than client-side iframe probing
   useEffect(() => {
     setEmbeddable(null);
-    apiFetch(`/api/util/check-frame?url=${encodeURIComponent(url)}`)
+    apiFetch(`/api/v1/util/check-frame?url=${encodeURIComponent(url)}`)
       .then(r => r.json())
       .then(d => {
         if (!d.embeddable) {

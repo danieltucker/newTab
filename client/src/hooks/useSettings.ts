@@ -50,13 +50,13 @@ export function useSettings(accessToken: string | null) {
 
   useEffect(() => {
     if (!accessToken) return;
-    apiGet<UserSettings>('/api/settings')
+    apiGet<UserSettings>('/api/v1/settings')
       .then(s => { setSettings(s); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, [accessToken]);
 
   const update = useCallback(async (patch: Partial<UserSettings>) => {
-    const updated = await apiPatch<UserSettings>('/api/settings', patch);
+    const updated = await apiPatch<UserSettings>('/api/v1/settings', patch);
     setSettings(updated);
     return updated;
   }, []);

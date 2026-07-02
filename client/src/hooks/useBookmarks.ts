@@ -10,7 +10,7 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
     if (!accessToken || !folderId) return;
     setLoading(true);
     try {
-      const data = await apiGet<Bookmark[]>(`/api/bookmarks?folderId=${folderId}`);
+      const data = await apiGet<Bookmark[]>(`/api/v1/bookmarks?folderId=${folderId}`);
       setBookmarks(data);
     } finally {
       setLoading(false);
@@ -22,7 +22,7 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
   const addBookmark = useCallback(async (payload: {
     folderId: string; domain: string; name: string; faviconUrl: string; color: string;
   }) => {
-    const bookmark = await apiPost<Bookmark>('/api/bookmarks', payload);
+    const bookmark = await apiPost<Bookmark>('/api/v1/bookmarks', payload);
     if (payload.folderId === folderId) {
       setBookmarks(prev => [...prev, bookmark]);
     }
@@ -30,7 +30,7 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
   }, [folderId]);
 
   const updateBookmark = useCallback(async (id: string, updates: Partial<Pick<Bookmark, 'domain' | 'name' | 'faviconUrl' | 'color' | 'folderId'>>) => {
-    const updated = await apiPut<Bookmark>(`/api/bookmarks/${id}`, updates);
+    const updated = await apiPut<Bookmark>(`/api/v1/bookmarks/${id}`, updates);
     if (updates.folderId && updates.folderId !== folderId) {
       setBookmarks(prev => prev.filter(b => b.id !== id));
     } else {
@@ -40,17 +40,17 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
   }, [folderId]);
 
   const deleteBookmark = useCallback(async (id: string) => {
-    await apiDelete(`/api/bookmarks/${id}`);
+    await apiDelete(`/api/v1/bookmarks/${id}`);
     setBookmarks(prev => prev.filter(b => b.id !== id));
   }, []);
 
   const reorderBookmarks = useCallback(async (reordered: Bookmark[]) => {
     setBookmarks(reordered);
-    await apiPut('/api/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
+    await apiPut('/api/v1/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
   }, []);
 
   const checkFeed = useCallback(async (id: string) => {
-    const res = await apiFetch(`/api/bookmarks/${id}/check-feed`, { method: 'POST' });
+    const res = await apiFetch(`/api/v1/bookmarks/${id}/check-feed`, { method: 'POST' });
     if (!res.ok) return;
     const updated: Bookmark = await res.json();
     setBookmarks(prev => prev.map(b => b.id === id ? updated : b));
@@ -58,7 +58,7 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
 
   const markVisited = useCallback(async (id: string) => {
     setBookmarks(prev => prev.map(b => b.id === id ? { ...b, lastVisitedAt: new Date().toISOString(), unreadCount: 0 } : b));
-    apiFetch(`/api/bookmarks/${id}/visited`, { method: 'POST' }).catch(() => {});
+    apiFetch(`/api/v1/bookmarks/${id}/visited`, { method: 'POST' }).catch(() => {});
   }, []);
 
   return { bookmarks, setBookmarks, loading, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, checkFeed, markVisited, reload: load };

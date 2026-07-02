@@ -10,7 +10,7 @@ export function getAccessToken() {
 
 async function refreshSession(): Promise<boolean> {
   try {
-    const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+    const res = await fetch('/api/v1/auth/refresh', { method: 'POST', credentials: 'include' });
     if (!res.ok) return false;
     const data = await res.json();
     accessToken = data.accessToken;

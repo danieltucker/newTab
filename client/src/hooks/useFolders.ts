@@ -10,7 +10,7 @@ export function useFolders(accessToken: string | null) {
     if (!accessToken) return;
     setLoading(true);
     try {
-      const data = await apiGet<Folder[]>('/api/folders');
+      const data = await apiGet<Folder[]>('/api/v1/folders');
       setFolders(data);
     } finally {
       setLoading(false);
@@ -20,24 +20,24 @@ export function useFolders(accessToken: string | null) {
   useEffect(() => { load(); }, [load]);
 
   const createFolder = useCallback(async (name: string, color: string) => {
-    const folder = await apiPost<Folder>('/api/folders', { name, color });
+    const folder = await apiPost<Folder>('/api/v1/folders', { name, color });
     setFolders(prev => [...prev, folder]);
     return folder;
   }, []);
 
   const updateFolder = useCallback(async (id: string, updates: Partial<Pick<Folder, 'name' | 'color' | 'feedUrls'>>) => {
-    await apiPut(`/api/folders/${id}`, updates);
+    await apiPut(`/api/v1/folders/${id}`, updates);
     setFolders(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
   }, []);
 
   const deleteFolder = useCallback(async (id: string) => {
-    await apiDelete(`/api/folders/${id}`);
+    await apiDelete(`/api/v1/folders/${id}`);
     setFolders(prev => prev.filter(f => f.id !== id));
   }, []);
 
   const reorderFolders = useCallback(async (reordered: Folder[]) => {
     setFolders(reordered);
-    await apiPut('/api/folders/reorder', reordered.map((f, i) => ({ id: f.id, position: i })));
+    await apiPut('/api/v1/folders/reorder', reordered.map((f, i) => ({ id: f.id, position: i })));
   }, []);
 
   return { folders, loading, createFolder, updateFolder, deleteFolder, reorderFolders, reload: load };

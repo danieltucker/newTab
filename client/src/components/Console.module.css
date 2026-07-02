@@ -4,6 +4,7 @@
   z-index: 300;
   display: flex;
   align-items: flex-start;
+  padding: 15px;
 }
 
 .console {
@@ -13,15 +14,62 @@
   display: flex;
   flex-direction: column;
   background: #0d1117;
-  border-bottom: 1px solid #21262d;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  overflow: hidden;
   font-family: 'IBM Plex Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
-  animation: slideDown 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.6);
+  transform-origin: top center;
+  animation: slideDown 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.consoleClosing {
+  animation: slideUp 0.32s cubic-bezier(0.6, 0, 0.8, 0.35) forwards;
 }
 
 @keyframes slideDown {
-  from { transform: translateY(-100%); }
-  to   { transform: translateY(0); }
+  0%   {
+    transform: translateY(-120%) scaleY(0.45);
+    border-radius: 10px 10px 50% 50%;
+    opacity: 0;
+  }
+  40%  { opacity: 1; }
+  68%  {
+    transform: translateY(8px) scaleY(1.03);
+    border-radius: 10px 10px 22px 22px;
+  }
+  84%  {
+    transform: translateY(-2px) scaleY(0.991);
+    border-radius: 10px 10px 13px 13px;
+  }
+  100% {
+    transform: translateY(0) scaleY(1);
+    border-radius: 10px;
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  0%   {
+    transform: translateY(0) scaleY(1);
+    border-radius: 10px;
+    opacity: 1;
+  }
+  22%  {
+    transform: translateY(10px) scaleY(0.96);
+    border-radius: 10px 10px 28px 28px;
+    opacity: 1;
+  }
+  65%  {
+    border-radius: 10px 10px 50% 50%;
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-120%) scaleY(0.5);
+    border-radius: 10px 10px 50% 50%;
+    opacity: 0;
+  }
 }
 
 /* ── Header ── */

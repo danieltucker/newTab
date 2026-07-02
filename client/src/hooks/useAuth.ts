@@ -16,7 +16,7 @@ export function useAuth() {
   useEffect(() => {
     if (refreshAttempted.current) return;
     refreshAttempted.current = true;
-    fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+    fetch('/api/v1/auth/refresh', { method: 'POST', credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.accessToken) {
@@ -30,7 +30,7 @@ export function useAuth() {
   }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<{ requiresTotp: true; totpToken: string; username: string } | void> => {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch('/api/v1/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -49,7 +49,7 @@ export function useAuth() {
   }, []);
 
   const verifyTotp = useCallback(async (totpToken: string, code: string) => {
-    const res = await fetch('/api/auth/totp-verify', {
+    const res = await fetch('/api/v1/auth/totp-verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -65,7 +65,7 @@ export function useAuth() {
   }, []);
 
   const register = useCallback(async (username: string, password: string) => {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch('/api/v1/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -81,7 +81,7 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(async () => {
-    await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    await apiFetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => {});
     setAccessToken(null);
     setState({ accessToken: null, username: null, loading: false });
   }, []);

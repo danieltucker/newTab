@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { signAccess, signRefresh, verifyRefresh, signTotpPending, verifyTotpPending, REFRESH_TTL_MS } from '../lib/jwt';
 import speakeasy from 'speakeasy';
+import logger from '../lib/logger';
 
 const router = Router();
 
@@ -25,6 +26,10 @@ const DEFAULT_FOLDERS = [
 ];
 
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  if (process.env.REGISTRATION_ENABLED === 'false') {
+    res.status(403).json({ error: 'Registration is currently closed' });
+    return;
+  }
   const { username, password } = req.body;
   if (!username || !password) {
     res.status(400).json({ error: 'Username and password required' });
@@ -65,7 +70,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       res.status(409).json({ error: 'Username already taken' });
       return;
     }
-    console.error(err);
+    logger.error(err, 'Register error');
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -99,7 +104,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
     res.json({ accessToken, username: user.username });
   } catch (err) {
-    console.error(err);
+    logger.error(err, 'Login error');
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -117,8 +122,10 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Invalid refresh token' });
       return;
     }
-    // rotate
-    await prisma.refreshToken.delete({ where: { token } });
+    // Rotate: delete used token + any other expired tokens for this user in one pass
+    await prisma.refreshToken.deleteMany({
+      where: { OR: [{ token }, { userId: payload.sub, expiresAt: { lt: new Date() } }] },
+    });
     const newRefresh = signRefresh(payload.sub);
     await prisma.refreshToken.create({
       data: {

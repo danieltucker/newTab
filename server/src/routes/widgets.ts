@@ -1,23 +1,13 @@
 import { Router, Request, Response } from 'express';
 import nodeFetch from 'node-fetch';
 import { requireAuth } from '../middleware/auth';
-import { isSafeUrl } from '../lib/isSafeUrl';
+import { makeSafeAgent } from '../lib/isSafeUrl';
+import { decodeXmlEntities, cleanContent, parseFeedTitle } from '../lib/feedUtils';
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
 
 const router = Router();
 router.use(requireAuth);
-
-function decodeXmlEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
-}
-
-function cleanContent(s: string): string {
-  return decodeXmlEntities(s.replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim());
-}
 
 function parseRss(xml: string, limit = 8): Array<{ title: string; link: string; date: string | null }> {
   const items: Array<{ title: string; link: string; date: string | null }> = [];
@@ -44,20 +34,17 @@ function parseRss(xml: string, limit = 8): Array<{ title: string; link: string; 
   return items;
 }
 
-function parseFeedTitle(xml: string): string {
-  const m = xml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return m ? cleanContent(m[1]) : '';
-}
-
 // GET /api/widgets/rss?url=...
 router.get('/rss', async (req: Request, res: Response): Promise<void> => {
   const { url } = req.query;
   if (!url || typeof url !== 'string') { res.status(400).json({ error: 'url required' }); return; }
 
-  if (!(await isSafeUrl(url))) { res.status(400).json({ error: 'Invalid or private URL' }); return; }
+  const safeAgent = await makeSafeAgent(url);
+  if (!safeAgent) { res.status(400).json({ error: 'Invalid or private URL' }); return; }
 
   try {
     const resp = await nodeFetch(url, {
+      agent: safeAgent,
       timeout: 8000,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0; +RSS)' },
     } as FetchOptions);

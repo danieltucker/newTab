@@ -11,8 +11,9 @@ model User {
   username      String            @unique
   passwordHash  String
   settings      Json              @default("{}")
-  totpSecret    String?
-  totpEnabled   Boolean           @default(false)
+  totpSecret        String?
+  totpPendingSecret String?
+  totpEnabled       Boolean           @default(false)
   createdAt     DateTime          @default(now())
   folders       Folder[]
   bookmarks     Bookmark[]
@@ -28,6 +29,8 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Folder {
@@ -43,6 +46,8 @@ model Folder {
   bookmarks         Bookmark[]
   feedArticles      FeedArticle[]
   createdAt         DateTime      @default(now())
+
+  @@index([userId])
 }
 
 model FeedArticle {
@@ -83,6 +88,9 @@ model Bookmark {
   unreadCount   Int       @default(0)
   lastVisitedAt DateTime?
   createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([folderId])
 }
 
 model ReadingListItem {
@@ -97,4 +105,6 @@ model ReadingListItem {
   notes    String   @default("")
   archived Boolean  @default(false)
   savedAt  DateTime @default(now())
+
+  @@index([userId])
 }

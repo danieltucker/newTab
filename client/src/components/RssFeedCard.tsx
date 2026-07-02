@@ -67,7 +67,7 @@ export default function RssFeedCard({ feedUrls, onSetFeedUrls, onRemove, feedBoo
 
     Promise.all(
       feedUrls.map(url =>
-        apiFetch(`/api/widgets/rss?url=${encodeURIComponent(url)}`)
+        apiFetch(`/api/v1/widgets/rss?url=${encodeURIComponent(url)}`)
           .then(r => r.ok ? r.json() : r.json().then((e: any) => Promise.reject(new Error(e.error ?? `Error ${r.status}`))))
           .then((data: { title: string; items: Array<{ title: string; link: string; date: string | null }> }) => ({
             title: data.title || new URL(url).hostname,

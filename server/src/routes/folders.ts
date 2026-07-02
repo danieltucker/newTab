@@ -3,6 +3,7 @@ import nodeFetch from 'node-fetch';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { parseFeed, parseFeedTitle } from '../lib/feedUtils';
+import logger from '../lib/logger';
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
 
@@ -11,6 +12,8 @@ router.use(requireAuth);
 
 const FEED_STALE_MS = 30 * 60 * 1000;   // 30 minutes
 const FEED_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const UPSERT_CHUNK = 10;
 
 async function refreshFolderFeeds(folderId: string, userId: string, feedUrls: string[]) {
   const now = new Date();
@@ -28,13 +31,17 @@ async function refreshFolderFeeds(folderId: string, userId: string, feedUrls: st
       const items = parseFeed(xml, 50);
       const source = parseFeedTitle(xml) || new URL(feedUrl).hostname.replace(/^www\./, '');
 
-      await Promise.all(items.map(item =>
-        prisma.feedArticle.upsert({
-          where: { folderId_link: { folderId, link: item.link } },
-          create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
-          update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
-        }).catch(() => {})
-      ));
+      // Process upserts in small chunks to avoid overwhelming the DB connection pool
+      for (let i = 0; i < items.length; i += UPSERT_CHUNK) {
+        const chunk = items.slice(i, i + UPSERT_CHUNK);
+        await Promise.all(chunk.map(item =>
+          prisma.feedArticle.upsert({
+            where: { folderId_link: { folderId, link: item.link } },
+            create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
+            update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
+          }).catch(() => {})
+        ));
+      }
     } catch {}
   }));
 
@@ -53,6 +60,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const { name, color } = req.body;
   if (!name || !color) { res.status(400).json({ error: 'name and color required' }); return; }
+  if (typeof name !== 'string' || name.length > 100) { res.status(400).json({ error: 'name must be ≤100 characters' }); return; }
   const count = await prisma.folder.count({ where: { userId: req.userId! } });
   const folder = await prisma.folder.create({
     data: { userId: req.userId!, name, color, position: count },
@@ -77,7 +85,10 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
     const data: Record<string, unknown> = {};
     if (name) data.name = name;
     if (color) data.color = color;
-    if (Array.isArray(feedUrls)) data.feedUrls = feedUrls.filter((u: unknown) => typeof u === 'string');
+    if (Array.isArray(feedUrls)) {
+      if (feedUrls.length > 20) { res.status(400).json({ error: 'Maximum 20 feed URLs per folder' }); return; }
+      data.feedUrls = feedUrls.filter((u: unknown) => typeof u === 'string' && (u as string).length <= 2048);
+    }
     if ('backgroundImage' in req.body) data.backgroundImage = backgroundImage || null;
 
     const result = await prisma.folder.updateMany({
@@ -140,7 +151,14 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
       Date.now() - folder.feedLastCheckedAt.getTime() > FEED_STALE_MS;
 
     if (needsRefresh) {
-      await refreshFolderFeeds(id, req.userId!, folder.feedUrls);
+      const hasExisting = await prisma.feedArticle.count({ where: { folderId: id } });
+      if (hasExisting > 0) {
+        // Stale but we have data — return it immediately and refresh behind the scenes
+        refreshFolderFeeds(id, req.userId!, folder.feedUrls).catch(() => {});
+      } else {
+        // First load — wait so the user doesn't see an empty list
+        await refreshFolderFeeds(id, req.userId!, folder.feedUrls);
+      }
     }
 
     const where = includeAll
@@ -159,7 +177,7 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
 
     res.json({ articles, total, hasMore: offset + articles.length < total });
   } catch (err) {
-    console.error('Feed articles error:', err);
+    logger.error(err, 'Feed articles error');
     res.status(500).json({ error: 'Server error' });
   }
 });

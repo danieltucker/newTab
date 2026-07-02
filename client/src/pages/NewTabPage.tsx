@@ -92,7 +92,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
   // Bulk-load all bookmarks in one round-trip on first load
   useEffect(() => {
     if (!accessToken) return;
-    apiGet<Bookmark[]>('/api/bookmarks/all').then(all => {
+    apiGet<Bookmark[]>('/api/v1/bookmarks/all').then(all => {
       const grouped: Record<string, Bookmark[]> = {};
       for (const bm of all) {
         if (!grouped[bm.folderId]) grouped[bm.folderId] = [];
@@ -149,6 +149,19 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
   const [showImport, setShowImport] = useState(false);
   const [articleUrl, setArticleUrl] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
+  const [consoleFading, setConsoleFading] = useState(false);
+  const showConsoleRef = useRef(false);
+  showConsoleRef.current = showConsole;
+  const consoleFadingRef = useRef(false);
+  consoleFadingRef.current = consoleFading;
+
+  function closeConsole() {
+    if (consoleFadingRef.current) return;
+    setConsoleFading(true);
+    setTimeout(() => { setShowConsole(false); setConsoleFading(false); }, 320);
+  }
+  const closeConsoleRef = useRef(closeConsole);
+  closeConsoleRef.current = closeConsole;
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
@@ -178,7 +191,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
       if (e.code !== 'Backquote') return;
       if (!settings.consoleEnabled) return;
       e.preventDefault();
-      setShowConsole(v => !v);
+      if (showConsoleRef.current) { closeConsoleRef.current(); } else { setShowConsole(true); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -449,7 +462,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
           onClose={() => setShowImport(false)}
           onImported={() => {
             // Refetch the bulk bookmark cache so new imports appear immediately
-            apiGet<Bookmark[]>('/api/bookmarks/all').then(all => {
+            apiGet<Bookmark[]>('/api/v1/bookmarks/all').then(all => {
               const grouped: Record<string, Bookmark[]> = {};
               for (const bm of all) {
                 if (!grouped[bm.folderId]) grouped[bm.folderId] = [];
@@ -502,7 +515,8 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
           onSelectFolder={setActiveFolderId}
           onSetTheme={handleSetTheme}
           onRefreshFeeds={() => setFeedRefreshKey(k => k + 1)}
-          onClose={() => setShowConsole(false)}
+          closing={consoleFading}
+          onClose={closeConsole}
         />
       )}
     </div>

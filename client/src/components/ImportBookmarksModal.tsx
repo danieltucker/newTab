@@ -60,7 +60,7 @@ export default function ImportBookmarksModal({ folders, activeFolderId, onClose,
     if (!folderId) return;
     setImporting(true);
     try {
-      const r = await apiFetch('/api/bookmarks/import', {
+      const r = await apiFetch('/api/v1/bookmarks/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folderId, bookmarks }),

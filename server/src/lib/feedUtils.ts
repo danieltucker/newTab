@@ -4,14 +4,14 @@ type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
 
 // ── RSS / Atom parser ──────────────────────────────────────────────────────
 
-function decodeXmlEntities(s: string): string {
+export function decodeXmlEntities(s: string): string {
   return s
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }
 
-function cleanContent(s: string): string {
+export function cleanContent(s: string): string {
   return decodeXmlEntities(s.replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim());
 }
 
@@ -105,55 +105,6 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
 export function parseFeedTitle(xml: string): string {
   const m = xml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return m ? cleanContent(m[1]) : '';
-}
-
-// ── Feed discovery ─────────────────────────────────────────────────────────
-
-const COMMON_FEED_PATHS = ['/feed', '/rss', '/rss.xml', '/feed.xml', '/atom.xml', '/feed/rss2', '/index.xml'];
-
-export async function discoverFeedUrl(domain: string): Promise<string | null> {
-  const baseUrl = `https://${domain}`;
-  try {
-    const resp = await nodeFetch(baseUrl, {
-      timeout: 6000,
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0; +Feed)' },
-    } as FetchOptions);
-    if (!resp.ok) return null;
-
-    const html = await resp.text();
-
-    // Look for <link rel="alternate" type="application/rss+xml|atom+xml">
-    const linkRe = /<link[^>]+rel=["']alternate["'][^>]*>/gi;
-    let lm;
-    while ((lm = linkRe.exec(html)) !== null) {
-      const tag = lm[0];
-      const typeMatch = tag.match(/type=["']application\/(rss|atom)\+xml["']/i);
-      if (!typeMatch) continue;
-      const hrefMatch = tag.match(/href=["']([^"']+)["']/i);
-      if (!hrefMatch) continue;
-      const href = hrefMatch[1];
-      if (href.startsWith('http')) return href;
-      if (href.startsWith('//')) return `https:${href}`;
-      return `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
-    }
-  } catch {}
-
-  // Probe common paths
-  for (const path of COMMON_FEED_PATHS) {
-    const url = `${baseUrl}${path}`;
-    try {
-      const r = await nodeFetch(url, {
-        method: 'HEAD',
-        timeout: 3000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0; +Feed)' },
-      } as FetchOptions);
-      const ct = r.headers.get('content-type') ?? '';
-      if (r.ok && (ct.includes('xml') || ct.includes('rss') || ct.includes('atom'))) return url;
-    } catch {}
-  }
-
-  return null;
 }
 
 // ── Feed checker ───────────────────────────────────────────────────────────

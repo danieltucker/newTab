@@ -23,5 +23,5 @@ export function deriveName(domain: string): string {
 }
 
 export function faviconUrl(domain: string): string {
-  return `/api/util/favicon?domain=${encodeURIComponent(domain)}`;
+  return `/api/v1/util/favicon?domain=${encodeURIComponent(domain)}`;
 }

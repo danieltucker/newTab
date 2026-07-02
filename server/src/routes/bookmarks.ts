@@ -146,6 +146,8 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(400).json({ error: 'folderId, domain, and name required' });
     return;
   }
+  if (typeof name !== 'string' || name.length > 100) { res.status(400).json({ error: 'name must be ≤100 characters' }); return; }
+  if (typeof domain !== 'string' || domain.length > 253) { res.status(400).json({ error: 'domain must be ≤253 characters' }); return; }
   const folder = await prisma.folder.findFirst({ where: { id: folderId, userId: req.userId! } });
   if (!folder) { res.status(404).json({ error: 'Folder not found' }); return; }
   const count = await prisma.bookmark.count({ where: { folderId, userId: req.userId! } });

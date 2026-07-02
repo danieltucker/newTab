@@ -80,13 +80,13 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
 
   useEffect(() => {
     if (section !== 'security') return;
-    apiFetch('/api/totp/status').then(r => r.json()).then(d => setTotpEnabled(d.enabled));
+    apiFetch('/api/v1/totp/status').then(r => r.json()).then(d => setTotpEnabled(d.enabled));
   }, [section]);
 
   async function handleEnroll() {
     setTotpLoading(true); setTotpError('');
     try {
-      const r = await apiFetch('/api/totp/enroll', { method: 'POST' });
+      const r = await apiFetch('/api/v1/totp/enroll', { method: 'POST' });
       const d = await r.json();
       setEnrollData(d);
       setTotpStep('confirming');
@@ -98,10 +98,10 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
     if (!enrollData || totpCode.length !== 6) return;
     setTotpLoading(true); setTotpError('');
     try {
-      const r = await apiFetch('/api/totp/confirm', {
+      const r = await apiFetch('/api/v1/totp/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret: enrollData.secret, code: totpCode }),
+        body: JSON.stringify({ code: totpCode }),
       });
       if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
       setTotpEnabled(true); setTotpStep('idle'); setEnrollData(null); setTotpCode('');
@@ -113,7 +113,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
     if (totpCode.length !== 6) return;
     setTotpLoading(true); setTotpError('');
     try {
-      const r = await apiFetch('/api/totp/disable', {
+      const r = await apiFetch('/api/v1/totp/disable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: totpCode }),

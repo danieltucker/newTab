@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import speakeasy from 'speakeasy';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
+import logger from '../lib/logger';
 
 const router = Router();
 router.use(requireAuth);
@@ -13,38 +14,56 @@ router.get('/status', async (req: AuthRequest, res: Response): Promise<void> => 
   res.json({ enabled: user?.totpEnabled ?? false });
 });
 
-// POST /api/totp/enroll — generate a fresh secret + QR code for the user to scan
+// POST /api/totp/enroll — generate a fresh secret, persist it as pending, return QR + secret for display
 router.post('/enroll', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { username: true } });
   if (!user) { res.status(404).json({ error: 'User not found' }); return; }
 
   const secret = speakeasy.generateSecret({ length: 20 });
 
-  // Manually build the URL so issuer appears as both the label prefix and a query param.
-  // Some apps (Authy, Microsoft Authenticator) silently ignore the account if issuer is absent.
+  // Store pending secret in DB — confirm will read from here, not from the client
+  await prisma.user.update({
+    where: { id: req.userId! },
+    data: { totpPendingSecret: secret.base32 },
+  });
+
   const otpauthUrl =
     `otpauth://totp/${encodeURIComponent(`NewTab:${user.username}`)}` +
     `?secret=${secret.base32}&issuer=NewTab&algorithm=SHA1&digits=6&period=30`;
 
   const qrDataUrl = await QRCode.toDataURL(otpauthUrl, { width: 256, errorCorrectionLevel: 'M' });
+  // Return secret so the user can type it in manually if QR scan fails
   res.json({ secret: secret.base32, qrDataUrl });
 });
 
-// POST /api/totp/confirm — verify the first code then permanently enable TOTP
+// POST /api/totp/confirm — verify code against the server-stored pending secret, then enable TOTP
 router.post('/confirm', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { secret, code } = req.body;
-  if (!secret || !code) { res.status(400).json({ error: 'secret and code required' }); return; }
+  const { code } = req.body;
+  if (!code) { res.status(400).json({ error: 'code required' }); return; }
 
-  const valid = speakeasy.totp.verify({ secret, encoding: 'base32', token: String(code), window: 2 });
+  const user = await prisma.user.findUnique({
+    where: { id: req.userId! },
+    select: { totpPendingSecret: true },
+  });
+  if (!user?.totpPendingSecret) {
+    res.status(400).json({ error: 'No pending TOTP enrollment — call /enroll first' }); return;
+  }
+
+  const valid = speakeasy.totp.verify({
+    secret: user.totpPendingSecret,
+    encoding: 'base32',
+    token: String(code),
+    window: 2,
+  });
   if (!valid) {
-    const expected = speakeasy.totp({ secret, encoding: 'base32' });
-    console.error(`[TOTP confirm] received="${code}" expected="${expected}" serverTime=${new Date().toISOString()}`);
+    const expected = speakeasy.totp({ secret: user.totpPendingSecret, encoding: 'base32' });
+    logger.warn({ received: code, expected, serverTime: new Date().toISOString() }, 'TOTP confirm: invalid code');
     res.status(422).json({ error: 'Invalid code — try again' }); return;
   }
 
   await prisma.user.update({
     where: { id: req.userId! },
-    data: { totpSecret: secret, totpEnabled: true },
+    data: { totpSecret: user.totpPendingSecret, totpPendingSecret: null, totpEnabled: true },
   });
   res.json({ ok: true });
 });
@@ -64,7 +83,7 @@ router.post('/disable', async (req: AuthRequest, res: Response): Promise<void> =
 
   await prisma.user.update({
     where: { id: req.userId! },
-    data: { totpSecret: null, totpEnabled: false },
+    data: { totpSecret: null, totpPendingSecret: null, totpEnabled: false },
   });
   res.json({ ok: true });
 });

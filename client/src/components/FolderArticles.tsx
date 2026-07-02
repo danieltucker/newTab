@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import { FeedArticle } from '../types';
 import styles from './FolderArticles.module.css';
@@ -37,6 +37,8 @@ function domainOf(url: string): string {
 }
 
 export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10 }: Props) {
+  const seededFolders = useRef<Set<string>>(new Set());
+
   const faviconByDomain = useMemo(() => {
     const map: Record<string, string> = {};
     for (const bm of (bookmarks ?? [])) {
@@ -65,7 +67,7 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
     offset === 0 ? setLoading(true) : setLoadingMore(true);
     setError('');
     try {
-      const r = await apiFetch(`/api/folders/${folderId}/articles?offset=${offset}&limit=${pageSize}`);
+      const r = await apiFetch(`/api/v1/folders/${folderId}/articles?offset=${offset}&limit=${pageSize}`);
       if (!r.ok) { setError('Could not load feed'); return; }
       const data: { articles: FeedArticle[]; total: number } = await r.json();
       const merged = offset === 0 ? data.articles : [...existing, ...data.articles];
@@ -86,16 +88,17 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
     load(0, []);
   }, [folderId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Background load: all articles (including dismissed) for search seeding
+  // Background load for search seeding — fires at most once per folder per session
   useEffect(() => {
-    if (!onArticlesLoaded) return;
-    apiFetch(`/api/folders/${folderId}/articles?includeAll=true&limit=200`)
+    if (!onArticlesLoaded || seededFolders.current.has(folderId)) return;
+    seededFolders.current.add(folderId);
+    apiFetch(`/api/v1/folders/${folderId}/articles?includeAll=true&limit=200`)
       .then(r => r.ok ? r.json() : null)
       .then((data: { articles: FeedArticle[] } | null) => {
         if (data?.articles?.length) onArticlesLoaded(data.articles);
       })
       .catch(() => {});
-  }, [folderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [folderId, onArticlesLoaded]);
 
   function handleSave(a: FeedArticle) {
     if (saved.has(a.id)) return;
@@ -108,7 +111,7 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
   async function handleDismiss(articleId: string) {
     setArticles(prev => prev.filter(a => a.id !== articleId));
     setTotal(prev => Math.max(0, prev - 1));
-    apiFetch(`/api/folders/${folderId}/articles/${articleId}`, { method: 'DELETE' }).catch(() => {});
+    apiFetch(`/api/v1/folders/${folderId}/articles/${articleId}`, { method: 'DELETE' }).catch(() => {});
   }
 
   if (loading) return (

@@ -9,6 +9,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const items = await prisma.readingListItem.findMany({
     where: { userId: req.userId! },
     orderBy: { savedAt: 'desc' },
+    take: 500,
   });
   res.json(items);
 });
@@ -16,6 +17,9 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const { url, title, source, readTime, tag } = req.body;
   if (!url || !title) { res.status(400).json({ error: 'url and title required' }); return; }
+  if (typeof url !== 'string' || url.length > 2048) { res.status(400).json({ error: 'url must be ≤2048 characters' }); return; }
+  if (typeof title !== 'string' || title.length > 500) { res.status(400).json({ error: 'title must be ≤500 characters' }); return; }
+  if (source !== undefined && typeof source === 'string' && source.length > 200) { res.status(400).json({ error: 'source must be ≤200 characters' }); return; }
 
   // Only allow http/https — blocks javascript:, data:, vbscript:, etc.
   try {
@@ -44,9 +48,15 @@ router.patch('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   const { archived, title, tag, notes } = req.body;
   const data: Record<string, unknown> = {};
   if (typeof archived === 'boolean') data.archived = archived;
-  if (typeof title === 'string') data.title = title;
+  if (typeof title === 'string') {
+    if (title.length > 500) { res.status(400).json({ error: 'title must be ≤500 characters' }); return; }
+    data.title = title;
+  }
   if (typeof tag === 'string') data.tag = tag;
-  if (typeof notes === 'string') data.notes = notes;
+  if (typeof notes === 'string') {
+    if (notes.length > 50000) { res.status(400).json({ error: 'notes must be ≤50,000 characters' }); return; }
+    data.notes = notes;
+  }
   if (Object.keys(data).length === 0) { res.status(400).json({ error: 'No fields to update' }); return; }
   const existing = await prisma.readingListItem.findFirst({
     where: { id: req.params.id, userId: req.userId! },

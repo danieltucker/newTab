@@ -3,12 +3,16 @@ import nodeFetch from 'node-fetch';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { isSafeUrl } from '../lib/isSafeUrl';
+import { isSafeUrl, makeSafeAgent } from '../lib/isSafeUrl';
 
 const execFileAsync = promisify(execFile);
 
 function isValidHost(host: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9.\-]{0,251}[a-zA-Z0-9]?$/.test(host);
+}
+
+function isValidDomain(d: string): boolean {
+  return typeof d === 'string' && d.length > 0 && d.length <= 253 && isValidHost(d);
 }
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
@@ -49,9 +53,12 @@ const router = Router();
 // favicon and color are intentionally public (favicon proxies Google; color is deterministic)
 router.get('/favicon', async (req: Request, res: Response): Promise<void> => {
   const { domain } = req.query;
-  if (!domain) { res.status(400).json({ error: 'domain required' }); return; }
+  if (!domain || !isValidDomain(domain as string)) {
+    res.status(400).json({ error: 'valid domain required' }); return;
+  }
   try {
-    const url = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    const safeDomain = encodeURIComponent(domain as string);
+    const url = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=128`;
     const upstream = await nodeFetch(url, { timeout: 5000 } as FetchOptions);
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/png');
     res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -79,6 +86,9 @@ router.get('/ip', requireAuth, async (req: AuthRequest, res: Response): Promise<
 });
 
 router.get('/ping', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (process.env.CONSOLE_ENABLED === 'false') {
+    res.status(403).json({ error: 'Console features are disabled on this server' }); return;
+  }
   const { host } = req.query;
   if (!host || typeof host !== 'string' || !isValidHost(host)) {
     res.status(400).json({ error: 'Invalid host' }); return;
@@ -94,6 +104,9 @@ router.get('/ping', requireAuth, async (req: AuthRequest, res: Response): Promis
 });
 
 router.get('/tracert', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  if (process.env.CONSOLE_ENABLED === 'false') {
+    res.status(403).json({ error: 'Console features are disabled on this server' }); return;
+  }
   const { host } = req.query;
   if (!host || typeof host !== 'string' || !isValidHost(host)) {
     res.status(400).json({ error: 'Invalid host' }); return;
@@ -117,13 +130,15 @@ router.get('/page-meta', requireAuth, async (req: AuthRequest, res: Response): P
 
   const fullUrl = url.startsWith('http') ? url : `https://${url}`;
 
-  if (!(await isSafeUrl(fullUrl))) {
+  const safeAgent = await makeSafeAgent(fullUrl);
+  if (!safeAgent) {
     res.status(400).json({ error: 'URL not allowed' });
     return;
   }
 
   try {
     const response = await nodeFetch(fullUrl, {
+      agent: safeAgent,
       timeout: 5000,
       redirect: 'follow',
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0)' },
@@ -168,13 +183,15 @@ router.get('/check-frame', requireAuth, async (req: AuthRequest, res: Response):
   if (!url || typeof url !== 'string') { res.status(400).json({ error: 'url required' }); return; }
 
   const fullUrl = url.startsWith('http') ? url : `https://${url}`;
-  if (!(await isSafeUrl(fullUrl))) { res.status(400).json({ error: 'URL not allowed' }); return; }
+  const safeAgent = await makeSafeAgent(fullUrl);
+  if (!safeAgent) { res.status(400).json({ error: 'URL not allowed' }); return; }
 
   try {
     let headers: nodeFetch.Headers | null = null;
 
     // Try HEAD first (faster), fall back to GET if server returns 405
     const headResp = await nodeFetch(fullUrl, {
+      agent: safeAgent,
       method: 'HEAD',
       timeout: 5000,
       redirect: 'follow',
@@ -183,6 +200,7 @@ router.get('/check-frame', requireAuth, async (req: AuthRequest, res: Response):
 
     if (headResp.status === 405) {
       const getResp = await nodeFetch(fullUrl, {
+        agent: safeAgent,
         method: 'GET',
         timeout: 5000,
         redirect: 'follow',

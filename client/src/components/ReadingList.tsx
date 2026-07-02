@@ -192,7 +192,7 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
     const timer = setTimeout(async () => {
       setFetching(true);
       try {
-        const res = await apiFetch(`/api/util/page-meta?url=${encodeURIComponent(trimmed)}`);
+        const res = await apiFetch(`/api/v1/util/page-meta?url=${encodeURIComponent(trimmed)}`);
         const data = await res.json();
         if (data.title && !titleEdited) setTitle(data.title);
       } catch {}

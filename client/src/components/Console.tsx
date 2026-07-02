@@ -59,7 +59,7 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
   ip: {
     desc: 'Show your public IP',
     run: async () => {
-      const res = await apiFetch('/api/util/ip');
+      const res = await apiFetch('/api/v1/util/ip');
       if (!res.ok) return 'Could not fetch IP info.';
       const d = await res.json() as { ip: string; city?: string; region?: string; country?: string; org?: string };
       const loc = [d.city, d.region, d.country].filter(Boolean).join(', ');
@@ -74,7 +74,7 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
     desc: 'Ping a host',
     run: async ([host]) => {
       if (!host) return 'Usage: ping <host>';
-      const res = await apiFetch(`/api/util/ping?host=${encodeURIComponent(host)}`);
+      const res = await apiFetch(`/api/v1/util/ping?host=${encodeURIComponent(host)}`);
       if (!res.ok) return 'Could not reach server.';
       const d = await res.json() as { output: string; error?: boolean };
       return d.output.trim().split('\n').filter(l => l.trim());
@@ -85,7 +85,7 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
     desc: 'Trace route to a host',
     run: async ([host]) => {
       if (!host) return 'Usage: tracert <host>';
-      const res = await apiFetch(`/api/util/tracert?host=${encodeURIComponent(host)}`);
+      const res = await apiFetch(`/api/v1/util/tracert?host=${encodeURIComponent(host)}`);
       if (!res.ok) return 'Could not reach server.';
       const d = await res.json() as { output: string; error?: boolean };
       return d.output.trim().split('\n').filter(l => l.trim());
@@ -116,7 +116,7 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
     run: async (_args, { folders, onRefreshFeeds }) => {
       const feedFolders = folders.filter(f => f.feedUrls && f.feedUrls.length > 0);
       if (feedFolders.length === 0) return 'No folders have RSS feeds configured.';
-      const res = await apiFetch('/api/folders/refresh-all', { method: 'POST' });
+      const res = await apiFetch('/api/v1/folders/refresh-all', { method: 'POST' });
       if (!res.ok) return 'Refresh failed — check server logs.';
       const d = await res.json() as { refreshed: number };
       onRefreshFeeds();
@@ -180,12 +180,13 @@ interface Props {
   onSelectFolder: (id: string) => void;
   onSetTheme: (t: 'dark' | 'light' | 'auto') => void;
   onRefreshFeeds: () => void;
+  closing?: boolean;
   onClose: () => void;
 }
 
 let lineId = 0;
 
-export default function Console({ folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds, onClose }: Props) {
+export default function Console({ folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds, closing = false, onClose }: Props) {
   const [lines, setLines] = useState<Line[]>([
     { id: lineId++, kind: 'info', text: 'Type "help" for available commands.' },
   ]);
@@ -285,7 +286,7 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
 
   return (
     <div className={styles.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={styles.console} onClick={e => e.stopPropagation()}>
+      <div className={`${styles.console} ${closing ? styles.consoleClosing : ''}`} onClick={e => e.stopPropagation()}>
 
         <div className={styles.header}>
           <span className={styles.headerTitle}>NEWT.AB CONSOLE</span>
