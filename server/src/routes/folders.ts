@@ -31,8 +31,8 @@ async function refreshFolderFeeds(folderId: string, userId: string, feedUrls: st
       await Promise.all(items.map(item =>
         prisma.feedArticle.upsert({
           where: { folderId_link: { folderId, link: item.link } },
-          create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, categories: item.categories },
-          update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, categories: item.categories },
+          create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
+          update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
         }).catch(() => {})
       ));
     } catch {}
@@ -108,6 +108,19 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
   res.json({ ok: true });
 });
 
+router.post('/refresh-all', async (req: AuthRequest, res: Response): Promise<void> => {
+  const folders = await prisma.folder.findMany({
+    where: { userId: req.userId!, NOT: { feedUrls: { isEmpty: true } } },
+    select: { id: true, feedUrls: true },
+  });
+  if (folders.length === 0) {
+    res.json({ refreshed: 0 });
+    return;
+  }
+  await Promise.all(folders.map(f => refreshFolderFeeds(f.id, req.userId!, f.feedUrls)));
+  res.json({ refreshed: folders.length });
+});
+
 router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
   const offset     = Math.max(0, parseInt(req.query.offset as string || '0') || 0);
@@ -139,7 +152,7 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
         orderBy: [{ pubDate: 'desc' }, { fetchedAt: 'desc' }],
         skip: offset,
         take: limit,
-        select: { id: true, feedUrl: true, title: true, link: true, source: true, pubDate: true, fetchedAt: true, readTime: true, categories: true },
+        select: { id: true, feedUrl: true, title: true, link: true, source: true, pubDate: true, fetchedAt: true, readTime: true, snippet: true, categories: true },
       }),
       prisma.feedArticle.count({ where }),
     ]);

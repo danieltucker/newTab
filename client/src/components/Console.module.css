@@ -101,6 +101,45 @@
   text-transform: uppercase;
 }
 
+/* ── Autocomplete suggestions ── */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 16px;
+  border-top: 1px solid #21262d;
+  background: #0d1117;
+  flex-shrink: 0;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border: 1px solid #21262d;
+  border-radius: 5px;
+  background: #161b22;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.suggestion:hover {
+  border-color: #58a6ff;
+  background: #1c2333;
+}
+
+.suggestionCmd {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #58a6ff;
+}
+
+.suggestionDesc {
+  font-size: 11px;
+  color: #484f58;
+}
+
 /* ── Input row ── */
 .inputRow {
   display: flex;

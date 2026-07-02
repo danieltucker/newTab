@@ -20,7 +20,16 @@ export interface FeedItem {
   link: string;
   date: Date | null;
   readTime: number | null;
+  snippet: string | null;
   categories: string[];
+}
+
+function extractSnippet(raw: string, maxChars = 200): string | null {
+  const text = stripHtml(cleanContent(raw)).replace(/\s+/g, ' ').trim();
+  if (!text || text.length < 20) return null;
+  if (text.length <= maxChars) return text;
+  const cut = text.lastIndexOf(' ', maxChars);
+  return (cut > 80 ? text.slice(0, cut) : text.slice(0, maxChars)) + '…';
 }
 
 function stripHtml(s: string): string {
@@ -60,6 +69,7 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
       ?? e.match(/<summary[^>]*>([\s\S]*?)<\/summary>/i)?.[1]
       ?? '';
     const readTime = estimateReadTime(contentRaw);
+    const snippet = extractSnippet(contentRaw);
 
     // Categories
     const categories: string[] = [];
@@ -84,7 +94,7 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
       items.push({
         title, link: link.trim(),
         date: date && !isNaN(date.getTime()) ? date : null,
-        readTime,
+        readTime, snippet,
         categories: categories.slice(0, 5),
       });
     }

@@ -103,17 +103,25 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     }).catch(() => {});
   }, [accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Background feed checking — once per folder switch, for stale bookmarks (>1h or never checked)
-  const feedCheckedFolders = useRef<Set<string>>(new Set());
+  // Background feed checking — on folder switch and every 30min while the tab stays open
+  const bookmarksRef = useRef(bookmarks);
+  useEffect(() => { bookmarksRef.current = bookmarks; }, [bookmarks]);
+
   useEffect(() => {
-    if (!bookmarks.length || !activeFolderId) return;
-    if (feedCheckedFolders.current.has(activeFolderId)) return;
-    feedCheckedFolders.current.add(activeFolderId);
-    const STALE_MS = 60 * 60 * 1000;
-    bookmarks
-      .filter(b => !b.feedCheckedAt || Date.now() - new Date(b.feedCheckedAt).getTime() > STALE_MS)
-      .forEach(b => checkFeed(b.id).catch(() => {}));
-  }, [bookmarks, activeFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!activeFolderId) return;
+    const STALE_MS = 30 * 60 * 1000;
+
+    const runCheck = () => {
+      bookmarksRef.current
+        .filter(b => !b.feedCheckedAt || Date.now() - new Date(b.feedCheckedAt).getTime() > STALE_MS)
+        .forEach(b => checkFeed(b.id).catch(() => {}));
+    };
+
+    // Delay initial check slightly so bookmarks have time to load
+    const initial = setTimeout(runCheck, 2000);
+    const interval = setInterval(runCheck, STALE_MS);
+    return () => { clearTimeout(initial); clearInterval(interval); };
+  }, [activeFolderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Feed articles for search (accumulated across folder switches)
   const [feedArticles, setFeedArticles] = useState<FeedArticle[]>([]);
@@ -127,7 +135,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
   }
 
   // Pending feed article save (shows SaveArticleModal)
-  type PendingSave = { id: string; url: string; title: string; source: string; markSaved: () => void };
+  type PendingSave = { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null; markSaved: () => void };
   const [savingArticle, setSavingArticle] = useState<PendingSave | null>(null);
 
   // Bookmarklet mode — true when this window was opened by a bookmarklet
@@ -141,6 +149,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
   const [showImport, setShowImport] = useState(false);
   const [articleUrl, setArticleUrl] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
+  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
 
@@ -156,7 +165,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     if (intent === 'save-article') {
       let source = '';
       try { source = new URL(url).hostname.replace(/^www\./, ''); } catch {}
-      setSavingArticle({ id: '', url, title, source, markSaved: () => { if (window.opener) window.close(); } });
+      setSavingArticle({ id: '', url, title, source, categories: [], readTime: null, markSaved: () => { if (window.opener) window.close(); } });
     } else if (intent === 'add-bookmark') {
       setBookmarkletAddUrl(url);
       setShowAddLink(true);
@@ -376,6 +385,8 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
                 bookmarks={activeFolderId ? (bookmarksByFolder[activeFolderId] ?? []) : []}
                 onSaveArticle={(a, markSaved) => setSavingArticle({ ...a, markSaved })}
                 onArticlesLoaded={handleFeedArticlesLoaded}
+                refreshKey={feedRefreshKey}
+                pageSize={settings.rssFeedPageSize ?? 10}
               />
             )}
           </div>
@@ -456,6 +467,8 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
           url={savingArticle.url}
           title={savingArticle.title}
           source={savingArticle.source}
+          initialTag={savingArticle.categories.join(',')}
+          initialReadTime={savingArticle.readTime != null ? `${savingArticle.readTime} min` : ''}
           onSave={async data => {
             await saveItem(data);
             savingArticle.markSaved();
@@ -488,6 +501,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
           theme={resolvedTheme}
           onSelectFolder={setActiveFolderId}
           onSetTheme={handleSetTheme}
+          onRefreshFeeds={() => setFeedRefreshKey(k => k + 1)}
           onClose={() => setShowConsole(false)}
         />
       )}

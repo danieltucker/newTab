@@ -11,8 +11,10 @@ interface BookmarkFavicon {
 interface Props {
   folderId: string;
   bookmarks?: BookmarkFavicon[];
-  onSaveArticle: (a: { id: string; url: string; title: string; source: string }, markSaved: () => void) => void;
+  onSaveArticle: (a: { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null }, markSaved: () => void) => void;
   onArticlesLoaded?: (articles: FeedArticle[]) => void;
+  refreshKey?: number;
+  pageSize?: number;
 }
 
 function relativeDate(s: string | null): string {
@@ -34,9 +36,7 @@ function domainOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
-const PAGE = 10;
-
-export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onArticlesLoaded }: Props) {
+export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10 }: Props) {
   const faviconByDomain = useMemo(() => {
     const map: Record<string, string> = {};
     for (const bm of (bookmarks ?? [])) {
@@ -65,7 +65,7 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
     offset === 0 ? setLoading(true) : setLoadingMore(true);
     setError('');
     try {
-      const r = await apiFetch(`/api/folders/${folderId}/articles?offset=${offset}&limit=${PAGE}`);
+      const r = await apiFetch(`/api/folders/${folderId}/articles?offset=${offset}&limit=${pageSize}`);
       if (!r.ok) { setError('Could not load feed'); return; }
       const data: { articles: FeedArticle[]; total: number } = await r.json();
       const merged = offset === 0 ? data.articles : [...existing, ...data.articles];
@@ -84,7 +84,7 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
     setTotal(0);
     setSaved(new Set());
     load(0, []);
-  }, [folderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [folderId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background load: all articles (including dismissed) for search seeding
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
   function handleSave(a: FeedArticle) {
     if (saved.has(a.id)) return;
     onSaveArticle(
-      { id: a.id, url: a.link, title: a.title, source: a.source },
+      { id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories, readTime: a.readTime },
       () => setSaved(prev => new Set(prev).add(a.id))
     );
   }
@@ -231,6 +231,9 @@ function ArticleCard({ article, isSaved, faviconByDomain, onSave, onDismiss }: {
         <a href={article.link} target="_blank" rel="noopener noreferrer" className={styles.title}>
           {article.title}
         </a>
+        {article.snippet && article.title.length < 60 && (
+          <p className={styles.snippet}>{article.snippet}</p>
+        )}
         {article.readTime != null && (
           <span className={styles.readTime}>
             {article.readTime === 1 ? '1 minute read' : `${article.readTime} minute read`}

@@ -1,26 +1,37 @@
 import { useState } from 'react';
 import styles from './SaveArticleModal.module.css';
+import TagChipInput from './TagChipInput';
 
 interface Props {
   url: string;
   title: string;
   source: string;
+  initialTag?: string;
+  initialReadTime?: string;
   onSave: (data: { url: string; title: string; source: string; readTime: string; tag: string }) => Promise<void>;
   onClose: () => void;
 }
 
-export default function SaveArticleModal({ url, title, source, onSave, onClose }: Props) {
+function parseTags(raw: string): string[] {
+  return raw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+}
+
+export default function SaveArticleModal({ url, title, source, initialTag = '', initialReadTime = '', onSave, onClose }: Props) {
   const [titleVal, setTitleVal]   = useState(title);
   const [sourceVal, setSourceVal] = useState(source);
-  const [tag, setTag]             = useState('');
-  const [readTime, setReadTime]   = useState('');
+  const [tags, setTags]           = useState<string[]>(parseTags(initialTag));
+  const [tagInput, setTagInput]   = useState('');
+  const [readTime, setReadTime]   = useState(initialReadTime);
   const [saving, setSaving]       = useState(false);
 
   async function handleSave() {
     if (!titleVal.trim()) return;
+    const finalTags = tagInput.trim()
+      ? [...tags, tagInput.trim().toLowerCase()]
+      : tags;
     setSaving(true);
     try {
-      await onSave({ url, title: titleVal.trim(), source: sourceVal.trim(), readTime: readTime.trim(), tag: tag.trim() });
+      await onSave({ url, title: titleVal.trim(), source: sourceVal.trim(), readTime: readTime.trim(), tag: finalTags.join(',') });
     } finally {
       setSaving(false);
     }
@@ -63,26 +74,21 @@ export default function SaveArticleModal({ url, title, source, onSave, onClose }
             onChange={e => setSourceVal(e.target.value)}
           />
 
-          <div className={styles.row}>
-            <div className={styles.field}>
-              <label className={styles.label}>Tag</label>
-              <input
-                className={styles.input}
-                value={tag}
-                onChange={e => setTag(e.target.value)}
-                placeholder="e.g. tech, science"
-              />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Read time</label>
-              <input
-                className={styles.input}
-                value={readTime}
-                onChange={e => setReadTime(e.target.value)}
-                placeholder="e.g. 5 min"
-              />
-            </div>
-          </div>
+          <label className={styles.label}>Tags</label>
+          <TagChipInput
+            tags={tags}
+            onChange={setTags}
+            inputValue={tagInput}
+            onInputChange={setTagInput}
+          />
+
+          <label className={styles.label}>Read time</label>
+          <input
+            className={`${styles.input} ${styles.inputNarrow}`}
+            value={readTime}
+            onChange={e => setReadTime(e.target.value)}
+            placeholder="e.g. 5 min"
+          />
         </div>
 
         <div className={styles.actions}>

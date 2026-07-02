@@ -215,10 +215,10 @@ router.post('/:id/check-feed', async (req: AuthRequest, res: Response): Promise<
       const dates = parseFeedDates(xml);
       if (dates.length > 0) {
         feedLatestAt = new Date(Math.max(...dates.map(d => d.getTime())));
-        if (bookmark.feedLatestAt) {
-          const since = new Date(bookmark.feedLatestAt);
-          unreadDelta = dates.filter(d => d > since).length;
-        }
+        const since = bookmark.feedLatestAt
+          ? new Date(bookmark.feedLatestAt)
+          : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // first check: articles from last 7 days
+        unreadDelta = dates.filter(d => d > since).length;
       }
     } else {
       feedUrl = null;

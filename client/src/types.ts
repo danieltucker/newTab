@@ -16,6 +16,7 @@ export interface FeedArticle {
   pubDate: string | null;
   fetchedAt: string;
   readTime: number | null;
+  snippet: string | null;
   categories: string[];
 }
 

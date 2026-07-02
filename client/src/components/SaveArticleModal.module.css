@@ -100,13 +100,7 @@
 .input:focus { border-color: var(--accent); }
 .input::placeholder { color: var(--muted); opacity: 0.5; }
 
-.row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.field { display: flex; flex-direction: column; }
+.inputNarrow { max-width: 140px; }
 
 .actions {
   display: flex;

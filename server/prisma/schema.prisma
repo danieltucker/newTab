@@ -59,6 +59,7 @@ model FeedArticle {
   fetchedAt  DateTime  @default(now())
   dismissed  Boolean   @default(false)
   readTime   Int?
+  snippet    String?
   categories String[]  @default([])
 
   @@unique([folderId, link])

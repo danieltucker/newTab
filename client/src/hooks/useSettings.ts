@@ -22,6 +22,7 @@ export interface UserSettings {
   activeWidgets: string[];
   worldClockZones: ClockZone[];
   rssFeedUrls: string[];
+  rssFeedPageSize?: 5 | 10 | 20 | 50;
 }
 
 const DEFAULTS: UserSettings = {
@@ -40,6 +41,7 @@ const DEFAULTS: UserSettings = {
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],
+  rssFeedPageSize: 10,
 };
 
 export function useSettings(accessToken: string | null) {

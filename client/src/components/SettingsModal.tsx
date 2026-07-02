@@ -325,6 +325,24 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
                     })}
                   </div>
                 </div>
+
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Feed articles per page</div>
+                  <div className={styles.pageSizeRow}>
+                    {([5, 10, 20, 50] as const).map(n => (
+                      <button
+                        key={n}
+                        className={`${styles.pageSizeBtn} ${(settings.rssFeedPageSize ?? 10) === n ? styles.pageSizeBtnActive : ''}`}
+                        onClick={() => onUpdate({ rssFeedPageSize: n })}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={styles.rowHint} style={{ marginTop: 8 }}>
+                    How many articles load at once when viewing a feed folder. Use "Load more" to fetch additional articles.
+                  </div>
+                </div>
               </>
             )}
 

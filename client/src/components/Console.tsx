@@ -14,6 +14,7 @@ interface Ctx {
   theme: 'dark' | 'light';
   onSelectFolder: (id: string) => void;
   onSetTheme: (t: 'dark' | 'light' | 'auto') => void;
+  onRefreshFeeds: () => void;
 }
 
 type CmdFn = (args: string[], ctx: Ctx) => Promise<string | string[]> | string | string[];
@@ -32,6 +33,7 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
       col('tracert',   'tracert <host>  — Trace route to host'),
       col('dns',       'dns <host> [A|AAAA|MX|TXT]  — DNS lookup'),
       col('speedtest', 'Download speed estimate'),
+      col('refresh',   'Force-refresh all RSS feeds'),
       '',
       'Navigation',
       col('folder',    'folder <name>  — Switch to a folder'),
@@ -109,6 +111,19 @@ const COMMANDS: Record<string, { desc: string; run: CmdFn }> = {
     },
   },
 
+  refresh: {
+    desc: 'Force-refresh all RSS feeds',
+    run: async (_args, { folders, onRefreshFeeds }) => {
+      const feedFolders = folders.filter(f => f.feedUrls && f.feedUrls.length > 0);
+      if (feedFolders.length === 0) return 'No folders have RSS feeds configured.';
+      const res = await apiFetch('/api/folders/refresh-all', { method: 'POST' });
+      if (!res.ok) return 'Refresh failed — check server logs.';
+      const d = await res.json() as { refreshed: number };
+      onRefreshFeeds();
+      return `Refreshed ${d.refreshed} folder${d.refreshed === 1 ? '' : 's'}.`;
+    },
+  },
+
   speedtest: {
     desc: 'Estimate download speed',
     run: async () => {
@@ -164,12 +179,13 @@ interface Props {
   theme: 'dark' | 'light';
   onSelectFolder: (id: string) => void;
   onSetTheme: (t: 'dark' | 'light' | 'auto') => void;
+  onRefreshFeeds: () => void;
   onClose: () => void;
 }
 
 let lineId = 0;
 
-export default function Console({ folders, theme, onSelectFolder, onSetTheme, onClose }: Props) {
+export default function Console({ folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds, onClose }: Props) {
   const [lines, setLines] = useState<Line[]>([
     { id: lineId++, kind: 'info', text: 'Type "help" for available commands.' },
   ]);
@@ -180,6 +196,12 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
 
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Only match on the first token and only when no space yet (still typing the command)
+  const firstToken = input.split(/\s/)[0].toLowerCase();
+  const suggestions = firstToken && !input.includes(' ')
+    ? CMD_NAMES.filter(c => c.startsWith(firstToken) && c !== firstToken)
+    : [];
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -214,7 +236,7 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
 
     setRunning(true);
     try {
-      const result = await def.run(args, { folders, theme, onSelectFolder, onSetTheme });
+      const result = await def.run(args, { folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds });
       if (result === '__CLEAR__') {
         setLines([]);
       } else {
@@ -236,10 +258,13 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
     if (e.key === 'Escape') { onClose(); return; }
     if (e.key === 'Tab') {
       e.preventDefault();
-      const partial = input.toLowerCase();
-      const matches = CMD_NAMES.filter(c => c.startsWith(partial));
-      if (matches.length === 1) setInput(matches[0]);
-      else if (matches.length > 1) push(matches.join('   '), 'info');
+      if (suggestions.length === 1) {
+        setInput(suggestions[0]);
+      } else if (suggestions.length > 1) {
+        setInput(suggestions[0]);
+      } else if (firstToken && CMD_NAMES.includes(firstToken)) {
+        // already a full command — do nothing
+      }
       return;
     }
     if (e.key === 'ArrowUp') {
@@ -281,6 +306,21 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
           ))}
           {running && <div className={styles.line} data-kind="info">Running…</div>}
         </div>
+
+        {suggestions.length > 0 && (
+          <div className={styles.suggestions}>
+            {suggestions.map(s => (
+              <button
+                key={s}
+                className={styles.suggestion}
+                onMouseDown={e => { e.preventDefault(); setInput(s); inputRef.current?.focus(); }}
+              >
+                <span className={styles.suggestionCmd}>{s}</span>
+                <span className={styles.suggestionDesc}>{COMMANDS[s].desc}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className={styles.inputRow}>
           <span className={styles.promptSymbol}>$</span>
