@@ -248,17 +248,21 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
                   <div className={styles.blockTitle}>Background</div>
                   <div className={styles.gradientGrid}>
                     {([
-                      { key: 'none',     label: 'None',     preview: '' },
-                      { key: 'aurora',   label: 'Aurora',   preview: 'linear-gradient(135deg,#0d3b2e,#1a1040)' },
-                      { key: 'dusk',     label: 'Dusk',     preview: 'linear-gradient(135deg,#4a1505,#2e0540)' },
-                      { key: 'ocean',    label: 'Ocean',    preview: 'linear-gradient(135deg,#0a2840,#043330)' },
-                      { key: 'midnight', label: 'Midnight', preview: 'linear-gradient(135deg,#1a0533,#0d0d2a)' },
-                      { key: 'rose',     label: 'Rose',     preview: 'linear-gradient(135deg,#3d0520,#2e1a00)' },
+                      { key: 'none',    label: 'None',       swatch: '' },
+                      { key: 'default', label: 'Background', swatch: 'radial-gradient(ellipse 80% 65% at 5% 72%, rgba(48,20,155,0.55) 0%, transparent 70%), linear-gradient(158deg, #07080d 0%, #0c0e1a 60%, #0a0c15 100%)' },
                     ] as const).map(g => {
-                      const active = (settings.backgroundGradient ?? 'none') === g.key;
+                      const active = (settings.backgroundGradient ?? 'default') !== 'none'
+                        ? g.key === 'default'
+                        : g.key === 'none';
                       return (
                         <button key={g.key} className={`${styles.gradientOption} ${active ? styles.gradientActive : ''}`} onClick={() => onUpdate({ backgroundGradient: g.key })}>
-                          <div className={styles.gradientSwatch} style={{ background: g.preview || 'var(--surface)' }} />
+                          <div
+                            className={styles.gradientSwatch}
+                            style={{
+                              backgroundColor: 'var(--bg)',
+                              backgroundImage: g.swatch || undefined,
+                            }}
+                          />
                           <span className={styles.gradientLabel}>{g.label}</span>
                         </button>
                       );
@@ -421,29 +425,33 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
             )}
 
             {section === 'advanced' && (
-              <div className={styles.sectionBlock}>
-                <div className={styles.row}>
-                  <div>
-                    <div className={styles.rowLabel}>Console</div>
-                    <div className={styles.rowHint}>Enable the backtick (`) console for power-user commands</div>
-                  </div>
-                  <Toggle
-                    checked={settings.consoleEnabled}
-                    onChange={v => onUpdate({ consoleEnabled: v })}
-                  />
-                </div>
-                {onImport && (
+              <>
+                <div className={styles.sectionBlock}>
                   <div className={styles.row}>
                     <div>
-                      <div className={styles.rowLabel}>Import bookmarks</div>
-                      <div className={styles.rowHint}>Import bookmarks from a browser HTML export or JSON file</div>
+                      <div className={styles.rowLabel}>Console</div>
+                      <div className={styles.rowHint}>Enable the backtick (`) console for power-user commands</div>
                     </div>
-                    <button className={styles.enableBtn} onClick={() => { onImport(); onClose(); }}>
-                      Import
-                    </button>
+                    <Toggle
+                      checked={settings.consoleEnabled}
+                      onChange={v => onUpdate({ consoleEnabled: v })}
+                    />
+                  </div>
+                </div>
+                {onImport && (
+                  <div className={styles.sectionBlock}>
+                    <div className={styles.row}>
+                      <div>
+                        <div className={styles.rowLabel}>Import bookmarks</div>
+                        <div className={styles.rowHint}>Import bookmarks from a browser HTML export or JSON file</div>
+                      </div>
+                      <button className={styles.enableBtn} onClick={() => { onImport(); onClose(); }}>
+                        Import
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
+              </>
             )}
 
             {section === 'integrations' && (() => {

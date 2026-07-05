@@ -185,13 +185,13 @@ interface Props {
 }
 
 let lineId = 0;
+let persistedLines: Line[] = [{ id: lineId++, kind: 'info', text: 'Type "help" for available commands.' }];
+let persistedHistory: string[] = [];
 
 export default function Console({ folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds, closing = false, onClose }: Props) {
-  const [lines, setLines] = useState<Line[]>([
-    { id: lineId++, kind: 'info', text: 'Type "help" for available commands.' },
-  ]);
+  const [lines, setLines] = useState<Line[]>(persistedLines);
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>(persistedHistory);
   const [histIdx, setHistIdx] = useState(-1);
   const [running, setRunning] = useState(false);
 
@@ -212,10 +212,11 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
 
   const push = useCallback((text: string | string[], kind: Line['kind'] = 'output') => {
     const texts = Array.isArray(text) ? text : [text];
-    setLines(prev => [
-      ...prev,
-      ...texts.map(t => ({ id: lineId++, kind, text: t })),
-    ]);
+    setLines(prev => {
+      const next = [...prev, ...texts.map(t => ({ id: lineId++, kind, text: t }))];
+      persistedLines = next;
+      return next;
+    });
   }, []);
 
   async function run(raw: string) {
@@ -223,7 +224,11 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
     if (!trimmed) return;
 
     push(`$ ${trimmed}`, 'input');
-    setHistory(h => [trimmed, ...h.filter(x => x !== trimmed)].slice(0, 50));
+    setHistory(h => {
+      const next = [trimmed, ...h.filter(x => x !== trimmed)].slice(0, 50);
+      persistedHistory = next;
+      return next;
+    });
     setHistIdx(-1);
     setInput('');
 
@@ -239,6 +244,7 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
     try {
       const result = await def.run(args, { folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds });
       if (result === '__CLEAR__') {
+        persistedLines = [];
         setLines([]);
       } else {
         push(result);

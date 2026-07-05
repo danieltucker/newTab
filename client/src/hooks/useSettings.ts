@@ -18,7 +18,7 @@ export interface UserSettings {
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
   bookmarkOpenMode?: 'same-tab' | 'new-tab';
-  backgroundGradient?: 'none' | 'aurora' | 'dusk' | 'ocean' | 'midnight' | 'rose';
+  backgroundGradient?: 'none' | 'default';
   activeWidgets: string[];
   worldClockZones: ClockZone[];
   rssFeedUrls: string[];
@@ -37,7 +37,7 @@ const DEFAULTS: UserSettings = {
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',
   bookmarkOpenMode: 'same-tab',
-  backgroundGradient: 'none',
+  backgroundGradient: 'default',
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],

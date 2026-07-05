@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import styles from './NewTabPage.module.css';
 import Header from '../components/Header';
 import SearchBar from '../components/SearchBar';
@@ -24,12 +24,37 @@ import { apiGet } from '../services/api';
 import { Bookmark, Folder, FeedArticle } from '../types';
 import { ThemeSetting, ResolvedTheme } from '../App';
 
-const GRADIENTS: Record<string, { dark: string; light: string }> = {
-  aurora:   { dark: 'radial-gradient(ellipse 70% 55% at 15% 5%, rgba(32,200,160,0.2) 0%, transparent 55%), radial-gradient(ellipse 60% 50% at 85% 90%, rgba(100,50,210,0.16) 0%, transparent 55%)', light: 'radial-gradient(ellipse 70% 55% at 15% 5%, rgba(0,160,130,0.12) 0%, transparent 55%), radial-gradient(ellipse 60% 50% at 85% 90%, rgba(100,50,210,0.09) 0%, transparent 55%)' },
-  dusk:     { dark: 'radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,80,20,0.18) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 15% 95%, rgba(180,40,200,0.14) 0%, transparent 55%)', light: 'radial-gradient(ellipse 80% 55% at 50% 0%, rgba(220,70,10,0.1) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 15% 95%, rgba(150,30,180,0.08) 0%, transparent 55%)' },
-  ocean:    { dark: 'radial-gradient(ellipse 80% 65% at 30% 20%, rgba(0,150,255,0.18) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 75% 80%, rgba(0,210,180,0.12) 0%, transparent 55%)', light: 'radial-gradient(ellipse 80% 65% at 30% 20%, rgba(0,120,220,0.11) 0%, transparent 60%), radial-gradient(ellipse 60% 55% at 75% 80%, rgba(0,180,160,0.08) 0%, transparent 55%)' },
-  midnight: { dark: 'radial-gradient(ellipse 100% 65% at 50% 0%, rgba(110,55,210,0.22) 0%, transparent 65%), radial-gradient(ellipse 60% 50% at 85% 85%, rgba(60,0,160,0.14) 0%, transparent 55%)', light: 'radial-gradient(ellipse 100% 65% at 50% 0%, rgba(90,40,180,0.1) 0%, transparent 65%), radial-gradient(ellipse 60% 50% at 85% 85%, rgba(60,0,140,0.07) 0%, transparent 55%)' },
-  rose:     { dark: 'radial-gradient(ellipse 70% 55% at 82% 8%, rgba(255,80,130,0.18) 0%, transparent 55%), radial-gradient(ellipse 60% 55% at 18% 88%, rgba(255,140,50,0.12) 0%, transparent 55%)', light: 'radial-gradient(ellipse 70% 55% at 82% 8%, rgba(220,60,110,0.11) 0%, transparent 55%), radial-gradient(ellipse 60% 55% at 18% 88%, rgba(200,120,30,0.08) 0%, transparent 55%)' },
+// Parallax background: one base + three floating blobs per theme.
+// Each layer moves at a different scroll speed to create depth.
+type BgLayer = { image: string; speed: number };
+
+const BG_LAYERS: Record<'dark' | 'light', BgLayer[]> = {
+  dark: [
+    // Base — opaque, anchors the color foundation, never moves
+    { image: 'linear-gradient(158deg, #07080d 0%, #0c0e1a 60%, #0a0c15 100%)', speed: 0 },
+    // Blob A — large indigo mass, lower-left, drifts slowest
+    { image: 'radial-gradient(ellipse 80% 65% at 5% 72%, rgba(48,20,155,0.30) 0%, rgba(32,12,105,0.10) 48%, transparent 70%)', speed: 0.06 },
+    // Blob B — dark cerulean, upper-right, medium drift
+    { image: 'radial-gradient(ellipse 62% 78% at 92% 18%, rgba(12,42,180,0.24) 0%, rgba(8,28,130,0.08) 50%, transparent 72%)', speed: 0.14 },
+    // Blob C — deep violet, bottom-centre, drifts fastest (feels closest)
+    { image: 'radial-gradient(ellipse 55% 48% at 50% 102%, rgba(70,10,150,0.22) 0%, transparent 65%)', speed: 0.26 },
+  ],
+  light: [
+    // Base
+    { image: 'linear-gradient(158deg, #e9eaf3 0%, #eff0f8 60%, #eaecf4 100%)', speed: 0 },
+    // Blob A — soft periwinkle, lower-left
+    { image: 'radial-gradient(ellipse 80% 65% at 5% 72%, rgba(155,162,225,0.42) 0%, rgba(142,150,215,0.14) 48%, transparent 70%)', speed: 0.06 },
+    // Blob B — powdery blue, upper-right
+    { image: 'radial-gradient(ellipse 62% 78% at 92% 18%, rgba(172,196,238,0.46) 0%, rgba(158,184,228,0.14) 50%, transparent 72%)', speed: 0.14 },
+    // Blob C — violet mist, bottom-centre
+    { image: 'radial-gradient(ellipse 55% 48% at 50% 102%, rgba(185,178,228,0.32) 0%, transparent 65%)', speed: 0.26 },
+  ],
+};
+
+// Cursor glow: blends directly with the background layers beneath it.
+const GLOW: Record<'dark' | 'light', { color: string; blend: React.CSSProperties['mixBlendMode'] }> = {
+  dark:  { color: 'rgba(190,205,255,0.09)', blend: 'screen'   },
+  light: { color: 'rgba(100,115,200,0.12)', blend: 'multiply' },
 };
 
 interface Props {
@@ -308,12 +333,99 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     }
   }
 
-  const gradientStyle = settings.backgroundGradient && settings.backgroundGradient !== 'none'
-    ? { backgroundImage: GRADIENTS[settings.backgroundGradient]?.[resolvedTheme] ?? '' }
-    : undefined;
+  // stable key: null when bg is off, otherwise the current theme ('dark'|'light')
+  const bgKey    = settings.backgroundGradient !== 'none' ? resolvedTheme : null;
+  const bgLayers = bgKey ? BG_LAYERS[bgKey] : [];
+  const glowCfg  = bgKey ? GLOW[bgKey]     : null;
+
+  const bgLayerRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const glowRef     = useRef<HTMLDivElement>(null);
+
+  // Per-layer parallax — base layer stays still, blobs drift at different speeds
+  useEffect(() => {
+    if (!bgLayers.length) return;
+    function onScroll() {
+      bgLayers.forEach((layer, i) => {
+        if (layer.speed === 0) return;
+        const el = bgLayerRefs.current[i];
+        if (el) el.style.transform = `translateY(${-window.scrollY * layer.speed}px)`;
+      });
+    }
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [bgKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lerp cursor glow + scroll nudge
+  useEffect(() => {
+    const el = glowRef.current;
+    if (!el) return;
+    el.style.opacity = '0';
+    if (!glowCfg) return;
+
+    let rafId = -1;
+    let tx = -9999, ty = -9999, cx = -9999, cy = -9999;
+    let scrollNudge = 0, lastScrollY = window.scrollY;
+    const LERP = 0.07;
+
+    function step() {
+      scrollNudge *= 0.88;
+      cx += (tx - cx) * LERP;
+      cy += (ty + scrollNudge - cy) * LERP;
+      el!.style.transform = `translate(${cx}px, ${cy}px)`;
+      rafId = requestAnimationFrame(step);
+    }
+
+    function onMove(e: MouseEvent) {
+      if (tx === -9999) { cx = e.clientX; cy = e.clientY; el!.style.opacity = '1'; rafId = requestAnimationFrame(step); }
+      tx = e.clientX; ty = e.clientY;
+    }
+
+    function onScroll() {
+      const d = window.scrollY - lastScrollY; lastScrollY = window.scrollY; scrollNudge += d * 0.3;
+    }
+
+    window.addEventListener('mousemove', onMove, { passive: true });
+    window.addEventListener('scroll', onScroll,  { passive: true });
+    return () => { cancelAnimationFrame(rafId); window.removeEventListener('mousemove', onMove); window.removeEventListener('scroll', onScroll); };
+  }, [bgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className={styles.page} style={gradientStyle}>
+    <>
+      {/* Background layers — z-index 0, page content sits at z-index 1 above them */}
+      {bgLayers.map((layer, i) => (
+        <div
+          key={i}
+          ref={el => { bgLayerRefs.current[i] = el; }}
+          style={{
+            position: 'fixed', inset: 0,
+            backgroundImage: layer.image,
+            pointerEvents: 'none',
+            zIndex: 0,
+            willChange: layer.speed > 0 ? 'transform' : undefined,
+          }}
+        />
+      ))}
+      {/* Cursor glow — same z-index layer as background, blends against it */}
+      <div
+        ref={glowRef}
+        style={{
+          position: 'fixed',
+          top: 0, left: 0,
+          width: 220, height: 220,
+          marginLeft: -110, marginTop: -110,
+          borderRadius: '50%',
+          background: glowCfg ? `radial-gradient(circle, ${glowCfg.color} 0%, transparent 68%)` : 'none',
+          pointerEvents: 'none',
+          zIndex: 0,
+          opacity: 0,
+          transform: 'translate(-9999px, -9999px)',
+          transition: 'opacity 0.4s ease',
+          willChange: 'transform',
+          mixBlendMode: glowCfg?.blend ?? 'normal',
+        }}
+      />
+    <div className={styles.page}>
       <div className={styles.content}>
       {/* Top-right bar: username + icon buttons */}
       <div className={styles.topBar}>
@@ -520,5 +632,6 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
         />
       )}
     </div>
+    </>
   );
 }
