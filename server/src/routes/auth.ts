@@ -16,7 +16,7 @@ const COOKIE_OPTS = {
   sameSite: 'strict' as const,
   secure: cookieSecure,
   maxAge: REFRESH_TTL_MS,
-  path: '/api/auth',
+  path: '/api/v1/auth',
 };
 
 const DEFAULT_FOLDERS = [
@@ -122,20 +122,28 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Invalid refresh token' });
       return;
     }
-    // Rotate: delete used token + any other expired tokens for this user in one pass
-    await prisma.refreshToken.deleteMany({
-      where: { OR: [{ token }, { userId: payload.sub, expiresAt: { lt: new Date() } }] },
-    });
-    const newRefresh = signRefresh(payload.sub);
-    await prisma.refreshToken.create({
-      data: {
-        token: newRefresh,
-        userId: payload.sub,
-        expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
-      },
-    });
     const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { username: true } });
-    res.cookie('refreshToken', newRefresh, COOKIE_OPTS);
+
+    // Only rotate when within 24 h of expiry — avoids a race condition where multiple
+    // concurrent requests (e.g. on laptop wake) all try to rotate the same token and
+    // the second one arrives after the first has already deleted it, forcing re-login + 2FA.
+    const msLeft = stored.expiresAt.getTime() - Date.now();
+    if (msLeft < 24 * 60 * 60 * 1000) {
+      await prisma.refreshToken.deleteMany({
+        where: { OR: [{ token }, { userId: payload.sub, expiresAt: { lt: new Date() } }] },
+      });
+      const newRefresh = signRefresh(payload.sub);
+      await prisma.refreshToken.create({
+        data: { token: newRefresh, userId: payload.sub, expiresAt: new Date(Date.now() + REFRESH_TTL_MS) },
+      });
+      res.cookie('refreshToken', newRefresh, COOKIE_OPTS);
+    } else {
+      // Prune other expired tokens without touching this one
+      await prisma.refreshToken.deleteMany({
+        where: { userId: payload.sub, expiresAt: { lt: new Date() } },
+      });
+    }
+
     res.json({ accessToken: signAccess(payload.sub), username: user?.username });
   } catch {
     res.status(401).json({ error: 'Invalid refresh token' });
@@ -172,7 +180,7 @@ router.post('/logout', async (req: Request, res: Response): Promise<void> => {
   if (token) {
     await prisma.refreshToken.deleteMany({ where: { token } }).catch(() => {});
   }
-  res.clearCookie('refreshToken', { path: '/api/auth' });
+  res.clearCookie('refreshToken', { path: '/api/v1/auth' });
   res.json({ ok: true });
 });
 

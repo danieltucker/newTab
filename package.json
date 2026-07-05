@@ -13,7 +13,7 @@
     "concurrently": "^8.2.2"
   },
   "allowScripts": {
-    "@prisma/client@5.22.0": true,
+    "@prisma/client@7.8.0": true,
     "sharp@0.33.5": true,
     "esbuild@0.21.5": true,
     "prisma@7.8.0": true,
