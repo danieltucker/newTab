@@ -64,7 +64,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       },
     });
     res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
-    res.status(201).json({ accessToken, username: user.username });
+    res.status(201).json({ accessToken, username: user.username, isAdmin: user.isAdmin });
   } catch (err: unknown) {
     if ((err as { code?: string }).code === 'P2002') {
       res.status(409).json({ error: 'Username already taken' });
@@ -102,7 +102,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       },
     });
     res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
-    res.json({ accessToken, username: user.username });
+    res.json({ accessToken, username: user.username, isAdmin: user.isAdmin });
   } catch (err) {
     logger.error(err, 'Login error');
     res.status(500).json({ error: 'Server error' });
@@ -122,7 +122,7 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Invalid refresh token' });
       return;
     }
-    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { username: true } });
+    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { username: true, isAdmin: true } });
 
     // Only rotate when within 24 h of expiry — avoids a race condition where multiple
     // concurrent requests (e.g. on laptop wake) all try to rotate the same token and
@@ -144,7 +144,7 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       });
     }
 
-    res.json({ accessToken: signAccess(payload.sub), username: user?.username });
+    res.json({ accessToken: signAccess(payload.sub), username: user?.username, isAdmin: user?.isAdmin ?? false });
   } catch {
     res.status(401).json({ error: 'Invalid refresh token' });
   }
@@ -169,7 +169,7 @@ router.post('/totp-verify', async (req: Request, res: Response): Promise<void> =
       data: { token: refreshToken, userId: user.id, expiresAt: new Date(Date.now() + REFRESH_TTL_MS) },
     });
     res.cookie('refreshToken', refreshToken, COOKIE_OPTS);
-    res.json({ accessToken, username: user.username });
+    res.json({ accessToken, username: user.username, isAdmin: user.isAdmin });
   } catch {
     res.status(401).json({ error: 'Invalid or expired session — please sign in again' });
   }

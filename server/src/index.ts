@@ -13,6 +13,8 @@ import utilRoutes from './routes/util';
 import settingsRoutes from './routes/settings';
 import totpRoutes from './routes/totp';
 import widgetRoutes from './routes/widgets';
+import adminRoutes from './routes/admin';
+import accountRoutes from './routes/account';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +54,8 @@ app.use('/api/v1/util', apiLimiter, utilRoutes);
 app.use('/api/v1/settings', apiLimiter, settingsRoutes);
 app.use('/api/v1/totp', apiLimiter, totpRoutes);
 app.use('/api/v1/widgets', apiLimiter, widgetRoutes);
+app.use('/api/v1/admin', apiLimiter, adminRoutes);
+app.use('/api/v1/account', apiLimiter, accountRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
