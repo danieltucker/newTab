@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import nodeFetch from 'node-fetch';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
-import { parseFeed, parseFeedTitle } from '../lib/feedUtils';
+import { parseFeed, parseFeedTitle, canonicalFeedKey } from '../lib/feedUtils';
 import logger from '../lib/logger';
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
@@ -15,13 +15,39 @@ const FEED_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const UPSERT_CHUNK = 10;
 
-async function refreshFolderFeeds(folderId: string, userId: string, feedUrls: string[]) {
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() - FEED_TTL_MS);
+// Feeds are shared: URL permutations collapse onto one Feed row via
+// canonicalFeedKey, and each feed is fetched once no matter how many
+// users/folders reference it. Returns the Feed rows for the given URLs.
+async function ensureFeeds(feedUrls: string[]) {
+  const byKey = new Map<string, string>(); // canonicalKey -> first-seen fetchUrl
+  for (const url of feedUrls) {
+    const key = canonicalFeedKey(url);
+    if (!byKey.has(key)) byKey.set(key, url);
+  }
+  const keys = Array.from(byKey.keys());
+  if (keys.length === 0) return [];
 
-  await Promise.all(feedUrls.map(async (feedUrl) => {
+  const existing = await prisma.feed.findMany({ where: { canonicalKey: { in: keys } } });
+  const existingKeys = new Set(existing.map(f => f.canonicalKey));
+  const missing = keys.filter(k => !existingKeys.has(k));
+  if (missing.length > 0) {
+    await prisma.feed.createMany({
+      data: missing.map(k => ({ canonicalKey: k, fetchUrl: byKey.get(k)! })),
+      skipDuplicates: true,
+    });
+    return prisma.feed.findMany({ where: { canonicalKey: { in: keys } } });
+  }
+  return existing;
+}
+
+async function refreshStaleFeeds(feeds: { id: string; fetchUrl: string; lastCheckedAt: Date | null }[]) {
+  const now = new Date();
+  const stale = feeds.filter(f => !f.lastCheckedAt || now.getTime() - f.lastCheckedAt.getTime() > FEED_STALE_MS);
+  if (stale.length === 0) return;
+
+  await Promise.all(stale.map(async (feed) => {
     try {
-      const resp = await nodeFetch(feedUrl, {
+      const resp = await nodeFetch(feed.fetchUrl, {
         timeout: 8000,
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0; +RSS)' },
       } as FetchOptions);
@@ -29,24 +55,25 @@ async function refreshFolderFeeds(folderId: string, userId: string, feedUrls: st
 
       const xml = await resp.text();
       const items = parseFeed(xml, 50);
-      const source = parseFeedTitle(xml) || new URL(feedUrl).hostname.replace(/^www\./, '');
+      const title = parseFeedTitle(xml) || new URL(feed.fetchUrl).hostname.replace(/^www\./, '');
 
       // Process upserts in small chunks to avoid overwhelming the DB connection pool
       for (let i = 0; i < items.length; i += UPSERT_CHUNK) {
         const chunk = items.slice(i, i + UPSERT_CHUNK);
         await Promise.all(chunk.map(item =>
-          prisma.feedArticle.upsert({
-            where: { folderId_link: { folderId, link: item.link } },
-            create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
-            update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
+          prisma.feedItem.upsert({
+            where: { feedId_link: { feedId: feed.id, link: item.link } },
+            create: { feedId: feed.id, title: item.title, link: item.link, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
+            update: { fetchedAt: now, title: item.title, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
           }).catch(() => {})
         ));
       }
+
+      // Items that dropped out of the feed expire after the TTL
+      await prisma.feedItem.deleteMany({ where: { feedId: feed.id, fetchedAt: { lt: new Date(now.getTime() - FEED_TTL_MS) } } });
+      await prisma.feed.update({ where: { id: feed.id }, data: { title, lastCheckedAt: now } });
     } catch {}
   }));
-
-  await prisma.feedArticle.deleteMany({ where: { folderId, fetchedAt: { lt: expiresAt } } });
-  await prisma.folder.updateMany({ where: { id: folderId, userId }, data: { feedLastCheckedAt: now } });
 }
 
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -122,14 +149,16 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
 router.post('/refresh-all', async (req: AuthRequest, res: Response): Promise<void> => {
   const folders = await prisma.folder.findMany({
     where: { userId: req.userId!, NOT: { feedUrls: { isEmpty: true } } },
-    select: { id: true, feedUrls: true },
+    select: { feedUrls: true },
   });
   if (folders.length === 0) {
     res.json({ refreshed: 0 });
     return;
   }
-  await Promise.all(folders.map(f => refreshFolderFeeds(f.id, req.userId!, f.feedUrls)));
-  res.json({ refreshed: folders.length });
+  const feeds = await ensureFeeds(folders.flatMap(f => f.feedUrls));
+  // Force refresh regardless of staleness — this is an explicit user action
+  await refreshStaleFeeds(feeds.map(f => ({ ...f, lastCheckedAt: null })));
+  res.json({ refreshed: feeds.length });
 });
 
 router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -147,33 +176,48 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    const needsRefresh = !folder.feedLastCheckedAt ||
-      Date.now() - folder.feedLastCheckedAt.getTime() > FEED_STALE_MS;
-
-    if (needsRefresh) {
-      const hasExisting = await prisma.feedArticle.count({ where: { folderId: id } });
-      if (hasExisting > 0) {
-        // Stale but we have data — return it immediately and refresh behind the scenes
-        refreshFolderFeeds(id, req.userId!, folder.feedUrls).catch(() => {});
-      } else {
-        // First load — wait so the user doesn't see an empty list
-        await refreshFolderFeeds(id, req.userId!, folder.feedUrls);
-      }
+    const feeds = await ensureFeeds(folder.feedUrls);
+    const neverFetched = feeds.some(f => !f.lastCheckedAt);
+    if (neverFetched) {
+      // First load of at least one feed — wait so the user doesn't see an empty list
+      await refreshStaleFeeds(feeds);
+    } else {
+      // Data exists — serve immediately, refresh stale feeds behind the scenes
+      refreshStaleFeeds(feeds).catch(() => {});
     }
 
-    const where = includeAll
-      ? { folderId: id, userId: req.userId! }
-      : { folderId: id, userId: req.userId!, dismissed: false };
-    const [articles, total] = await Promise.all([
-      prisma.feedArticle.findMany({
+    const feedIds = feeds.map(f => f.id);
+    const feedById = new Map(feeds.map(f => [f.id, f]));
+    const where = {
+      feedId: { in: feedIds },
+      ...(includeAll ? {} : { dismissals: { none: { userId: req.userId!, folderId: id } } }),
+    };
+    const [items, total] = await Promise.all([
+      prisma.feedItem.findMany({
         where,
         orderBy: [{ pubDate: 'desc' }, { fetchedAt: 'desc' }],
         skip: offset,
         take: limit,
-        select: { id: true, feedUrl: true, title: true, link: true, source: true, pubDate: true, fetchedAt: true, readTime: true, snippet: true, imageUrl: true, categories: true },
       }),
-      prisma.feedArticle.count({ where }),
+      prisma.feedItem.count({ where }),
     ]);
+
+    const articles = items.map(i => {
+      const feed = feedById.get(i.feedId);
+      return {
+        id: i.id,
+        feedUrl: feed?.fetchUrl ?? '',
+        title: i.title,
+        link: i.link,
+        source: feed?.title || '',
+        pubDate: i.pubDate,
+        fetchedAt: i.fetchedAt,
+        readTime: i.readTime,
+        snippet: i.snippet,
+        imageUrl: i.imageUrl,
+        categories: i.categories,
+      };
+    });
 
     res.json({ articles, total, hasMore: offset + articles.length < total });
   } catch (err) {
@@ -182,14 +226,15 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
   }
 });
 
+// "Dismiss" marks the shared item hidden for this user+folder only
 router.delete('/:id/articles/:articleId', async (req: AuthRequest, res: Response): Promise<void> => {
   const { id, articleId } = req.params;
   try {
     const folder = await prisma.folder.findFirst({ where: { id, userId: req.userId! } });
     if (!folder) { res.status(404).json({ error: 'Not found' }); return; }
-    await prisma.feedArticle.updateMany({
-      where: { id: articleId, folderId: id, userId: req.userId! },
-      data: { dismissed: true },
+    await prisma.dismissedFeedItem.createMany({
+      data: [{ userId: req.userId!, folderId: id, itemId: articleId }],
+      skipDuplicates: true,
     });
     res.json({ ok: true });
   } catch {

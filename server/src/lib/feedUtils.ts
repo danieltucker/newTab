@@ -145,6 +145,19 @@ export function parseFeedTitle(xml: string): string {
   return m ? cleanContent(m[1]) : '';
 }
 
+// Normalises a feed URL so permutations (http/https, www., trailing slash,
+// hash fragments) map to the same shared Feed row.
+export function canonicalFeedKey(raw: string): string {
+  try {
+    const u = new URL(raw.trim());
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    const path = u.pathname.replace(/\/+$/, '') || '/';
+    return `${host}${path}${u.search}`;
+  } catch {
+    return raw.trim().toLowerCase();
+  }
+}
+
 // ── Feed checker ───────────────────────────────────────────────────────────
 
 export interface FeedCheckResult {

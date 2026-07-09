@@ -3,6 +3,8 @@ import nodeFetch from 'node-fetch';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { isSafeUrl } from '../lib/isSafeUrl';
+import { canonicalFeedKey } from '../lib/feedUtils';
+import logger from '../lib/logger';
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
 
@@ -163,7 +165,35 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
     },
   });
   res.status(201).json(bookmark);
+
+  // Fire-and-forget: discover the site's RSS feed and add it to the folder,
+  // so feed articles appear automatically. Removable from the folder's edit
+  // modal; disabled entirely when the user turns RSS off in settings.
+  autoAddFeed(req.userId!, bookmark.id, folderId, domain).catch(err =>
+    logger.warn(err, 'Feed auto-add failed')
+  );
 });
+
+async function autoAddFeed(userId: string, bookmarkId: string, folderId: string, domain: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
+  const settings = user?.settings as { rssEnabled?: boolean } | null;
+  if (settings?.rssEnabled === false) return;
+
+  const feedUrl = await discoverFeed(domain);
+  if (!feedUrl) return;
+
+  // Remember it on the bookmark (drives the unread badge)
+  await prisma.bookmark.updateMany({ where: { id: bookmarkId, userId }, data: { feedUrl } });
+
+  const folder = await prisma.folder.findFirst({ where: { id: folderId, userId } });
+  if (!folder || folder.feedUrls.length >= 20) return;
+  const key = canonicalFeedKey(feedUrl);
+  if (folder.feedUrls.some(u => canonicalFeedKey(u) === key)) return;
+  await prisma.folder.updateMany({
+    where: { id: folderId, userId },
+    data: { feedUrls: [...folder.feedUrls, feedUrl] },
+  });
+}
 
 router.put('/reorder', async (req: AuthRequest, res: Response): Promise<void> => {
   const items: { id: string; position: number }[] = req.body;

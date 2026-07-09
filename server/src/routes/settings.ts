@@ -20,6 +20,7 @@ export interface UserSettings {
   backgroundGradient?: 'none' | 'aurora' | 'dusk' | 'ocean' | 'midnight' | 'rose';
   rssLayout?: 'list' | 'cards' | 'magazine';
   readingListLayout?: 'list' | 'cards';
+  rssEnabled?: boolean;
   activeWidgets: string[];
   worldClockZones: Array<{ city: string; zone: string }>;
   rssFeedUrls: string[];
@@ -40,6 +41,7 @@ const DEFAULTS: UserSettings = {
   backgroundGradient: 'none',
   rssLayout: 'cards',
   readingListLayout: 'cards',
+  rssEnabled: true,
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],
@@ -64,7 +66,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout']);
+  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled']);
   const incoming = req.body as Record<string, unknown>;
 
   // Validate keys

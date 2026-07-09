@@ -25,7 +25,7 @@ model User {
   bookmarks     Bookmark[]
   readingList   ReadingListItem[]
   refreshTokens RefreshToken[]
-  feedArticles  FeedArticle[]
+  dismissedFeedItems DismissedFeedItem[]
 }
 
 model RefreshToken {
@@ -50,32 +50,54 @@ model Folder {
   feedLastCheckedAt DateTime?
   backgroundImage   String?
   bookmarks         Bookmark[]
-  feedArticles      FeedArticle[]
+  dismissedFeedItems DismissedFeedItem[]
   createdAt         DateTime      @default(now())
 
   @@index([userId])
 }
 
-model FeedArticle {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  folderId  String
-  folder    Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  feedUrl   String
-  title     String
-  link      String
-  source    String
+// Feeds and their items are shared across all users — one fetch per feed
+// regardless of how many folders/users reference it. canonicalKey normalises
+// scheme/www/trailing-slash so URL permutations map to the same feed.
+model Feed {
+  id            String     @id @default(cuid())
+  canonicalKey  String     @unique
+  fetchUrl      String
+  title         String     @default("")
+  lastCheckedAt DateTime?
+  items         FeedItem[]
+}
+
+model FeedItem {
+  id         String    @id @default(cuid())
+  feedId     String
+  feed       Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  link       String
+  title      String
   pubDate    DateTime?
   fetchedAt  DateTime  @default(now())
-  dismissed  Boolean   @default(false)
   readTime   Int?
   snippet    String?
   imageUrl   String?
   categories String[]  @default([])
+  dismissals DismissedFeedItem[]
 
-  @@unique([folderId, link])
-  @@index([folderId])
+  @@unique([feedId, link])
+  @@index([feedId])
+}
+
+// Per-user, per-folder state on shared items (dismissed / saved-away)
+model DismissedFeedItem {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId  String
+  folder    Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      FeedItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, folderId, itemId])
+  @@index([folderId, userId])
 }
 
 model Bookmark {

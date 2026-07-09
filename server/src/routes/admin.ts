@@ -47,7 +47,7 @@ router.get('/stats', async (_req: AuthRequest, res: Response): Promise<void> => 
       prisma.bookmark.count(),
       prisma.folder.count(),
       prisma.readingListItem.count(),
-      prisma.feedArticle.count(),
+      prisma.feedItem.count(),
       prisma.user.findMany({
         where: { createdAt: { gte: since } },
         select: { createdAt: true },
