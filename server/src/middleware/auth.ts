@@ -6,19 +6,28 @@ export interface AuthRequest extends Request {
   userId?: string;
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Missing token' });
     return;
   }
+  let userId: string;
   try {
-    const payload = verifyAccess(header.slice(7));
-    req.userId = payload.sub;
-    next();
+    userId = verifyAccess(header.slice(7)).sub;
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
+    return;
   }
+  // Bans take effect immediately, not when the access token expires —
+  // one indexed PK lookup per request.
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { bannedAt: true } });
+  if (!user || user.bannedAt) {
+    res.status(401).json({ error: 'Account unavailable' });
+    return;
+  }
+  req.userId = userId;
+  next();
 }
 
 // Checks the DB on every request (not a JWT claim) so a revoked admin

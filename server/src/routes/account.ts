@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
@@ -13,18 +14,31 @@ router.use(requireAuth);
 const AVATAR_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const AVATAR_MAX_CHARS = 150_000; // ~110 KB decoded
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId! },
-    select: { username: true, firstName: true, lastName: true, avatar: true, totpEnabled: true },
+    select: { username: true, email: true, firstName: true, lastName: true, avatar: true, totpEnabled: true },
   });
   if (!user) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(user);
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { firstName, lastName, avatar } = req.body as Record<string, unknown>;
+  const { firstName, lastName, avatar, email } = req.body as Record<string, unknown>;
   const data: Record<string, string | null> = {};
+
+  if ('email' in req.body) {
+    if (email !== null && email !== '') {
+      if (typeof email !== 'string' || email.length > 254 || !EMAIL_RE.test(email)) {
+        res.status(400).json({ error: 'Enter a valid email address' }); return;
+      }
+      data.email = email.toLowerCase();
+    } else {
+      data.email = null;
+    }
+  }
 
   if ('firstName' in req.body) {
     if (firstName !== null && (typeof firstName !== 'string' || firstName.length > 100)) {
@@ -55,13 +69,54 @@ router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
     const user = await prisma.user.update({
       where: { id: req.userId! },
       data,
-      select: { username: true, firstName: true, lastName: true, avatar: true, totpEnabled: true },
+      select: { username: true, email: true, firstName: true, lastName: true, avatar: true, totpEnabled: true },
     });
     res.json(user);
-  } catch (err) {
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === 'P2002') {
+      res.status(409).json({ error: 'That email is already in use' });
+      return;
+    }
     logger.error(err, 'Account update error');
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ── First-admin bootstrap via setup token ─────────────────────────────────────
+// Claimable only while the instance has zero admins; afterwards the token is
+// inert and admins are managed from the admin panel.
+
+router.get('/admin-claim', async (_req: AuthRequest, res: Response): Promise<void> => {
+  if (!process.env.ADMIN_SETUP_TOKEN) { res.json({ claimable: false }); return; }
+  const admins = await prisma.user.count({ where: { isAdmin: true } });
+  res.json({ claimable: admins === 0 });
+});
+
+const claimLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, please try again later.' },
+});
+
+router.post('/admin-claim', claimLimiter, async (req: AuthRequest, res: Response): Promise<void> => {
+  const expected = process.env.ADMIN_SETUP_TOKEN;
+  const { token } = req.body as { token?: unknown };
+  if (!expected || typeof token !== 'string') {
+    res.status(400).json({ error: 'Admin setup is not enabled' }); return;
+  }
+  const admins = await prisma.user.count({ where: { isAdmin: true } });
+  if (admins > 0) { res.status(403).json({ error: 'An admin already exists' }); return; }
+
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    res.status(403).json({ error: 'Invalid setup token' }); return;
+  }
+  await prisma.user.update({ where: { id: req.userId! }, data: { isAdmin: true } });
+  logger.info({ userId: req.userId }, 'First admin claimed via setup token');
+  res.json({ ok: true });
 });
 
 // Stricter limit — each attempt verifies the current password, so this is

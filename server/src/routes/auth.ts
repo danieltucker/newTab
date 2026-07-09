@@ -87,6 +87,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
+    // Checked after password verification so a wrong guess can't probe ban status
+    if (user.bannedAt) {
+      res.status(403).json({ error: 'This account has been suspended. Contact an administrator.' });
+      return;
+    }
     // If TOTP is enabled, issue a short-lived pending token instead of full tokens
     if (user.totpEnabled) {
       res.json({ requiresTotp: true, totpToken: signTotpPending(user.id), username: user.username });
@@ -122,7 +127,11 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Invalid refresh token' });
       return;
     }
-    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { username: true, isAdmin: true } });
+    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { username: true, isAdmin: true, bannedAt: true } });
+    if (user?.bannedAt) {
+      res.status(401).json({ error: 'Invalid refresh token' });
+      return;
+    }
 
     // Only rotate when within 24 h of expiry — avoids a race condition where multiple
     // concurrent requests (e.g. on laptop wake) all try to rotate the same token and
@@ -159,6 +168,9 @@ router.post('/totp-verify', async (req: Request, res: Response): Promise<void> =
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.totpEnabled || !user.totpSecret) {
       res.status(401).json({ error: 'TOTP not configured' }); return;
+    }
+    if (user.bannedAt) {
+      res.status(403).json({ error: 'This account has been suspended. Contact an administrator.' }); return;
     }
     if (!speakeasy.totp.verify({ secret: user.totpSecret, encoding: 'base32', token: String(code), window: 2 })) {
       res.status(401).json({ error: 'Invalid code' }); return;
