@@ -2,6 +2,17 @@
   margin-top: 26px;
 }
 
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.headerRow .sectionLabel {
+  margin-bottom: 0;
+}
+
 .sectionLabel {
   font-size: 12px;
   font-weight: 600;
@@ -60,10 +71,102 @@
   font-weight: 600;
 }
 
-/* ── Column layout — masonry, cols auto-size from container ── */
+/* ── Cards layout (default) — masonry, cols auto-size from container ── */
 .grid {
   column-width: 200px;
   column-gap: 12px;
+}
+
+/* ── List layout — single column of roomy rows, persistent inline actions ── */
+.gridList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gridList .cardWrap {
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gridList .card {
+  order: 1;
+  flex: 1;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+}
+
+.gridList .cats,
+.gridList .snippet,
+.gridList .readTime { display: none; }
+
+.gridList .title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  -webkit-line-clamp: 1;
+}
+
+.gridList .cardBottom {
+  margin-top: 0;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.gridList .domain { max-width: 180px; }
+
+/* Actions leave the hover overlay and become part of the row */
+.gridList .cardActions {
+  order: 2;
+  position: static;
+  opacity: 1;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.gridList .actionBtn {
+  width: 32px;
+  height: 32px;
+}
+
+/* ── Magazine layout — wide masonry, cover images, roomier cards ── */
+.gridMagazine {
+  column-width: 300px;
+  column-gap: 16px;
+}
+
+.gridMagazine .cardWrap { margin-bottom: 16px; }
+
+.gridMagazine .card {
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 16px;
+}
+
+.gridMagazine .title {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  -webkit-line-clamp: 4;
+}
+
+.gridMagazine .snippet {
+  font-size: 13px;
+  -webkit-line-clamp: 3;
+}
+
+/* Cover image — bleeds to the card edges above the text */
+.hero {
+  width: calc(100% + 36px);
+  margin: -16px -18px 2px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface2);
 }
 
 /* ── Card wrap — lifts on hover ── */
@@ -294,4 +397,11 @@
 
 @media (max-width: 460px) {
   .grid { columns: 2; column-width: auto; }
+}
+
+/* Touch devices: hover never fires — keep actions visible and finger-sized.
+   Must stay at the end of the file to outrank the opacity: 0 base rule. */
+@media (hover: none) {
+  .cardActions { opacity: 1; }
+  .actionBtn { width: 32px; height: 32px; }
 }

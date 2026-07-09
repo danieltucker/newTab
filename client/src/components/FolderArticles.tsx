@@ -1,20 +1,26 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../services/api';
 import { FeedArticle } from '../types';
+import { faviconUrl } from '../utils/color';
+import LayoutSwitch, { ListIcon, CardsIcon, MagazineIcon } from './LayoutSwitch';
 import styles from './FolderArticles.module.css';
 
-interface BookmarkFavicon {
-  domain: string;
-  faviconUrl: string;
-}
+export type RssLayout = 'list' | 'cards' | 'magazine';
+
+const LAYOUT_OPTIONS = [
+  { value: 'list' as const,     title: 'List',     icon: <ListIcon /> },
+  { value: 'cards' as const,    title: 'Cards',    icon: <CardsIcon /> },
+  { value: 'magazine' as const, title: 'Magazine', icon: <MagazineIcon /> },
+];
 
 interface Props {
   folderId: string;
-  bookmarks?: BookmarkFavicon[];
   onSaveArticle: (a: { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null }, markSaved: () => void) => void;
   onArticlesLoaded?: (articles: FeedArticle[]) => void;
   refreshKey?: number;
   pageSize?: number;
+  layout?: RssLayout;
+  onLayoutChange?: (layout: RssLayout) => void;
 }
 
 function relativeDate(s: string | null): string {
@@ -36,16 +42,8 @@ function domainOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
-export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10 }: Props) {
+export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10, layout = 'cards', onLayoutChange }: Props) {
   const seededFolders = useRef<Set<string>>(new Set());
-
-  const faviconByDomain = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const bm of (bookmarks ?? [])) {
-      if (bm.faviconUrl) map[bm.domain] = bm.faviconUrl;
-    }
-    return map;
-  }, [bookmarks]);
   const [articles, setArticles]         = useState<FeedArticle[]>([]);
   const [total, setTotal]               = useState(0);
   const [loading, setLoading]           = useState(true);
@@ -137,11 +135,20 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
 
   const hasMore = articles.length < total;
 
+  const gridClass = layout === 'list' ? styles.gridList
+    : layout === 'magazine' ? styles.gridMagazine
+    : styles.grid;
+
   return (
     <div className={styles.wrap}>
-      <div className={styles.sectionLabel}>
-        Feed Articles
-        <span className={styles.count}>{total}</span>
+      <div className={styles.headerRow}>
+        <div className={styles.sectionLabel}>
+          Feed Articles
+          <span className={styles.count}>{total}</span>
+        </div>
+        {onLayoutChange && (
+          <LayoutSwitch value={layout} options={LAYOUT_OPTIONS} onChange={onLayoutChange} label="Feed layout" />
+        )}
       </div>
 
       {allCategories.length > 1 && (
@@ -164,13 +171,13 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
         </div>
       )}
 
-      <div className={styles.grid}>
+      <div className={gridClass}>
         {displayed.map(a => (
           <ArticleCard
             key={a.id}
             article={a}
             isSaved={saved.has(a.id)}
-            faviconByDomain={faviconByDomain}
+            showImage={layout === 'magazine'}
             onSave={() => handleSave(a)}
             onDismiss={() => handleDismiss(a.id)}
           />
@@ -189,17 +196,15 @@ export default function FolderArticles({ folderId, bookmarks, onSaveArticle, onA
   );
 }
 
-function ArticleCard({ article, isSaved, faviconByDomain, onSave, onDismiss }: {
-  article: FeedArticle; isSaved: boolean;
-  faviconByDomain: Record<string, string>;
+function ArticleCard({ article, isSaved, showImage, onSave, onDismiss }: {
+  article: FeedArticle; isSaved: boolean; showImage?: boolean;
   onSave: () => void; onDismiss: () => void;
 }) {
   const domain = domainOf(article.link);
   const feedDomain = domainOf(article.feedUrl);
-  // Prefer stored bookmark favicon (already validated); fall back to proxy
-  const faviconUrl = faviconByDomain[domain]
-    ?? faviconByDomain[feedDomain]
-    ?? (domain ? `/api/util/favicon?domain=${domain}` : '');
+  // Always derive from the domain (same as SiteTile) — stored bookmark favicon
+  // URLs can go stale when the API path changes.
+  const favicon = domain ? faviconUrl(domain) : feedDomain ? faviconUrl(feedDomain) : '';
 
   return (
     <div className={styles.cardWrap}>
@@ -224,6 +229,16 @@ function ArticleCard({ article, isSaved, faviconByDomain, onSave, onDismiss }: {
       </div>
 
       <div className={styles.card}>
+        {showImage && article.imageUrl && (
+          <img
+            src={article.imageUrl}
+            alt=""
+            className={styles.hero}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )}
         {article.categories.length > 0 && (
           <div className={styles.cats}>
             {article.categories.slice(0, 3).map(c => (
@@ -244,7 +259,7 @@ function ArticleCard({ article, isSaved, faviconByDomain, onSave, onDismiss }: {
         )}
         <div className={styles.cardBottom}>
           <div className={styles.meta}>
-            {faviconUrl && <img src={faviconUrl} alt="" className={styles.favicon} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+            {favicon && <img src={favicon} alt="" className={styles.favicon} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
             <span className={styles.domain}>{domain}</span>
           </div>
           <div className={styles.cardRight}>

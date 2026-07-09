@@ -17,6 +17,7 @@ export interface FeedArticle {
   fetchedAt: string;
   readTime: number | null;
   snippet: string | null;
+  imageUrl: string | null;
   categories: string[];
 }
 

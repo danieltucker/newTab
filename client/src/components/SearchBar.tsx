@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import styles from './SearchBar.module.css';
+import { faviconUrl } from '../utils/color';
 
 const SEARCH_URLS: Record<string, (q: string) => string> = {
   google:     q => `https://www.google.com/search?q=${q}`,
@@ -29,7 +30,6 @@ interface BookmarkHint {
   id: string;
   domain: string;
   name: string;
-  faviconUrl: string;
 }
 
 interface ArticleHint {
@@ -40,7 +40,7 @@ interface ArticleHint {
 }
 
 type Suggestion =
-  | { kind: 'bookmark'; id: string; name: string; domain: string; faviconUrl: string }
+  | { kind: 'bookmark'; id: string; name: string; domain: string }
   | { kind: 'article';  id: string; title: string; source: string; url: string }
   | { kind: 'search';   text: string; url: string }
   | { kind: 'url';      text: string; url: string }
@@ -83,7 +83,7 @@ export default function SearchBar({
     bookmarks
       .filter(b => b.name.toLowerCase().includes(q) || b.domain.toLowerCase().includes(q))
       .slice(0, 5)
-      .forEach(b => results.push({ kind: 'bookmark', id: b.id, name: b.name, domain: b.domain, faviconUrl: b.faviconUrl }));
+      .forEach(b => results.push({ kind: 'bookmark', id: b.id, name: b.name, domain: b.domain }));
 
     readingItems
       .filter(a => a.title.toLowerCase().includes(q) || a.source.toLowerCase().includes(q))
@@ -212,7 +212,7 @@ export default function SearchBar({
             if (item.kind === 'bookmark') return (
               <div key={item.id} className={`${styles.result} ${sel ? styles.resultSel : ''}`}
                 onMouseDown={() => handleMouseDown(item)} onMouseEnter={() => setSelectedIndex(i)}>
-                <img src={item.faviconUrl} alt="" className={styles.favicon} />
+                <img src={faviconUrl(item.domain)} alt="" className={styles.favicon} />
                 <div className={styles.resultText}>
                   <span className={styles.resultLabel}>{item.name}</span>
                   <span className={styles.resultSub}>{item.domain}</span>

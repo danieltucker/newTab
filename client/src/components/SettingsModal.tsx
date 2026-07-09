@@ -249,7 +249,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
                   <div className={styles.gradientGrid}>
                     {([
                       { key: 'none',    label: 'None',       swatch: '' },
-                      { key: 'default', label: 'Background', swatch: 'radial-gradient(ellipse 80% 65% at 5% 72%, rgba(48,20,155,0.55) 0%, transparent 70%), linear-gradient(158deg, #07080d 0%, #0c0e1a 60%, #0a0c15 100%)' },
+                      { key: 'default', label: 'Background', swatch: 'radial-gradient(ellipse 90% 70% at 50% 0%, rgba(139,145,255,0.22) 0%, transparent 65%), linear-gradient(180deg, #0b0c13 0%, #08090d 100%)' },
                     ] as const).map(g => {
                       const active = (settings.backgroundGradient ?? 'default') !== 'none'
                         ? g.key === 'default'

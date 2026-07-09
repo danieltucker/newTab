@@ -18,6 +18,8 @@ export interface UserSettings {
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
   bookmarkOpenMode?: 'same-tab' | 'new-tab';
   backgroundGradient?: 'none' | 'aurora' | 'dusk' | 'ocean' | 'midnight' | 'rose';
+  rssLayout?: 'list' | 'cards' | 'magazine';
+  readingListLayout?: 'list' | 'cards';
   activeWidgets: string[];
   worldClockZones: Array<{ city: string; zone: string }>;
   rssFeedUrls: string[];
@@ -36,6 +38,8 @@ const DEFAULTS: UserSettings = {
   readingListOpenMode: 'new-tab',
   bookmarkOpenMode: 'same-tab',
   backgroundGradient: 'none',
+  rssLayout: 'cards',
+  readingListLayout: 'cards',
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],
@@ -60,7 +64,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize']);
+  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout']);
   const incoming = req.body as Record<string, unknown>;
 
   // Validate keys

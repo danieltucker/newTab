@@ -21,6 +21,7 @@ export interface FeedItem {
   date: Date | null;
   readTime: number | null;
   snippet: string | null;
+  imageUrl: string | null;
   categories: string[];
 }
 
@@ -41,6 +42,42 @@ function estimateReadTime(raw: string): number | null {
   if (!text) return null;
   const words = text.split(/\s+/).length;
   return Math.max(1, Math.ceil(words / 200));
+}
+
+function sanitizeImageUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const url = decodeXmlEntities(raw.trim());
+  return /^https:\/\//i.test(url) && url.length <= 2048 ? url : null;
+}
+
+// Article image, in preference order: Media RSS thumbnail, media:content
+// (when it declares an image or nothing at all — it can also carry video),
+// image enclosure, first <img> in the content HTML.
+function extractImage(entry: string, contentRaw: string): string | null {
+  const thumb = entry.match(/<media:thumbnail[^>]+url=["']([^"']+)["']/i)?.[1];
+  if (thumb) return sanitizeImageUrl(thumb);
+
+  const mediaRe = /<media:content\b([^>]*)>/gi;
+  let mm;
+  while ((mm = mediaRe.exec(entry)) !== null) {
+    const attrs = mm[1];
+    const isImage = /medium=["']image["']/i.test(attrs) || /type=["']image\//i.test(attrs)
+      || (!/medium=/i.test(attrs) && !/type=/i.test(attrs));
+    if (!isImage) continue;
+    const url = sanitizeImageUrl(attrs.match(/url=["']([^"']+)["']/i)?.[1]);
+    if (url) return url;
+  }
+
+  const encRe = /<enclosure\b([^>]*)>/gi;
+  let em;
+  while ((em = encRe.exec(entry)) !== null) {
+    const attrs = em[1];
+    if (!/type=["']image\//i.test(attrs)) continue;
+    const url = sanitizeImageUrl(attrs.match(/url=["']([^"']+)["']/i)?.[1]);
+    if (url) return url;
+  }
+
+  return sanitizeImageUrl(cleanContent(contentRaw).match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]);
 }
 
 export function parseFeed(xml: string, limit = 100): FeedItem[] {
@@ -70,6 +107,7 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
       ?? '';
     const readTime = estimateReadTime(contentRaw);
     const snippet = extractSnippet(contentRaw);
+    const imageUrl = extractImage(e, contentRaw);
 
     // Categories
     const categories: string[] = [];
@@ -94,7 +132,7 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
       items.push({
         title, link: link.trim(),
         date: date && !isNaN(date.getTime()) ? date : null,
-        readTime, snippet,
+        readTime, snippet, imageUrl,
         categories: categories.slice(0, 5),
       });
     }

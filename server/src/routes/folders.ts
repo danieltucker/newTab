@@ -37,8 +37,8 @@ async function refreshFolderFeeds(folderId: string, userId: string, feedUrls: st
         await Promise.all(chunk.map(item =>
           prisma.feedArticle.upsert({
             where: { folderId_link: { folderId, link: item.link } },
-            create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
-            update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, snippet: item.snippet, categories: item.categories },
+            create: { userId, folderId, feedUrl, title: item.title, link: item.link, source, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
+            update: { fetchedAt: now, title: item.title, source, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
           }).catch(() => {})
         ));
       }
@@ -170,7 +170,7 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
         orderBy: [{ pubDate: 'desc' }, { fetchedAt: 'desc' }],
         skip: offset,
         take: limit,
-        select: { id: true, feedUrl: true, title: true, link: true, source: true, pubDate: true, fetchedAt: true, readTime: true, snippet: true, categories: true },
+        select: { id: true, feedUrl: true, title: true, link: true, source: true, pubDate: true, fetchedAt: true, readTime: true, snippet: true, imageUrl: true, categories: true },
       }),
       prisma.feedArticle.count({ where }),
     ]);

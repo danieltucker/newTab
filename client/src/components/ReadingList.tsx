@@ -5,6 +5,14 @@ import { parseDomain } from '../utils/color';
 import { apiFetch } from '../services/api';
 import TagChipInput from './TagChipInput';
 import EditArticleModal from './EditArticleModal';
+import LayoutSwitch, { ListIcon, CardsIcon } from './LayoutSwitch';
+
+export type ReadingListLayout = 'list' | 'cards';
+
+const LAYOUT_OPTIONS = [
+  { value: 'list' as const,  title: 'List',  icon: <ListIcon /> },
+  { value: 'cards' as const, title: 'Cards', icon: <CardsIcon /> },
+];
 
 interface Props {
   items: ReadingListItem[];
@@ -14,6 +22,8 @@ interface Props {
   onArchive: (id: string, archived: boolean) => Promise<void>;
   articleOpenMode?: 'new-tab' | 'same-tab' | 'iframe';
   onOpenArticle?: (url: string) => void;
+  layout?: ReadingListLayout;
+  onLayoutChange?: (layout: ReadingListLayout) => void;
 }
 
 function parseTags(tag: string): string[] {
@@ -141,7 +151,7 @@ function ReadingCard({ item, isPendingDelete, onDelete, onUndo, onArchive, onEdi
 
 const DELETE_DELAY = 3000;
 
-export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchive, articleOpenMode, onOpenArticle }: Props) {
+export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchive, articleOpenMode, onOpenArticle, layout = 'cards', onLayoutChange }: Props) {
   const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
   const timerMap = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -236,11 +246,16 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
     <div className={styles.section}>
       <div className={styles.headerRow}>
         <div className={styles.sectionLabel}>Reading list</div>
-        {!expanded ? (
-          <button className={styles.addBtn} onClick={() => setExpanded(true)}>+ Save article</button>
-        ) : (
-          <button className={styles.cancelBtn} onClick={handleCancel}>Cancel</button>
-        )}
+        <div className={styles.headerActions}>
+          {onLayoutChange && (
+            <LayoutSwitch value={layout} options={LAYOUT_OPTIONS} onChange={onLayoutChange} label="Reading list layout" />
+          )}
+          {!expanded ? (
+            <button className={styles.addBtn} onClick={() => setExpanded(true)}>+ Save article</button>
+          ) : (
+            <button className={styles.cancelBtn} onClick={handleCancel}>Cancel</button>
+          )}
+        </div>
       </div>
 
       {allTags.length > 0 && (
@@ -297,7 +312,7 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
         </div>
       )}
 
-      <div className={styles.grid}>
+      <div className={layout === 'list' ? styles.gridList : styles.grid}>
         {filtered.length === 0 && !expanded ? (
           <div className={styles.empty}>
             {activeTag ? `No articles tagged "${activeTag}".` : 'No saved articles yet.'}
@@ -327,7 +342,7 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
             Archived ({archived.length})
           </button>
           {showArchived && (
-            <div className={`${styles.grid} ${styles.archivedGrid}`}>
+            <div className={`${layout === 'list' ? styles.gridList : styles.grid} ${styles.archivedGrid}`}>
               {archived.map(item => (
                 <ReadingCard
                   key={item.id}

@@ -19,6 +19,8 @@ export interface UserSettings {
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
   bookmarkOpenMode?: 'same-tab' | 'new-tab';
   backgroundGradient?: 'none' | 'default';
+  rssLayout?: 'list' | 'cards' | 'magazine';
+  readingListLayout?: 'list' | 'cards';
   activeWidgets: string[];
   worldClockZones: ClockZone[];
   rssFeedUrls: string[];
@@ -38,6 +40,8 @@ const DEFAULTS: UserSettings = {
   readingListOpenMode: 'new-tab',
   bookmarkOpenMode: 'same-tab',
   backgroundGradient: 'default',
+  rssLayout: 'cards',
+  readingListLayout: 'cards',
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],

@@ -9,6 +9,12 @@
   margin-bottom: 12px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sectionLabel {
   font-size: 12px;
   font-weight: 600;
@@ -328,6 +334,59 @@
   column-gap: 12px;
 }
 
+/* ── List layout — single column of roomy rows, persistent inline actions ── */
+.gridList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gridList .cardWrap {
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gridList .card {
+  flex: 1;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+}
+
+.gridList .tagRow,
+.gridList .notes { display: none; }
+
+.gridList .title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gridList .meta {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Actions leave the hover overlay and become part of the row */
+.gridList .cardActions {
+  position: static;
+  opacity: 1;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.gridList .actionBtn {
+  width: 32px;
+  height: 32px;
+}
+
 /* Lift the whole wrap (card + action buttons) together on hover */
 .cardWrap {
   position: relative;
@@ -418,4 +477,11 @@
 
 @media (max-width: 460px) {
   .grid { columns: 2; column-width: auto; }
+}
+
+/* Touch devices: hover never fires — keep actions visible and finger-sized.
+   Must stay at the end of the file to outrank the opacity: 0 base rule. */
+@media (hover: none) {
+  .cardActions { opacity: 1; }
+  .actionBtn { width: 32px; height: 32px; }
 }

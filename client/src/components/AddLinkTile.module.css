@@ -1,9 +1,9 @@
+/* Mirrors SiteTile's geometry (14px padding + 36px chip) so both tiles
+   render at exactly the same height in the grid. */
 .tile {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
+  gap: 12px;
   padding: 14px;
   border-radius: 14px;
   min-height: 62px;
@@ -12,7 +12,8 @@
   color: var(--muted);
   cursor: pointer;
   font-family: 'Hanken Grotesk', sans-serif;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -28,7 +29,15 @@
 }
 
 .plus {
-  font-size: 20px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in oklab, currentColor 9%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
   line-height: 1;
   font-weight: 300;
 }

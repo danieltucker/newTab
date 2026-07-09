@@ -65,6 +65,7 @@ model FeedArticle {
   dismissed  Boolean   @default(false)
   readTime   Int?
   snippet    String?
+  imageUrl   String?
   categories String[]  @default([])
 
   @@unique([folderId, link])
