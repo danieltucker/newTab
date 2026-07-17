@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production deployment for TrueNAS SCALE (Docker / Compose runtime).
+#
+# Images are PULLED from GHCR — build & push them from your dev machine first:
+#     ./scripts/deploy/build-and-push.sh
+#
+# Supply values with a .env file next to this file (see .env.truenas.example),
+# or fill them into the TrueNAS Custom App "environment" fields.
+#
+# Access model: HTTPS terminated by your reverse proxy, which forwards to
+# http://<truenas-ip>:${APP_PORT}. The client's nginx serves the SPA and proxies
+# /api/ to the server container, so the reverse proxy only needs this one upstream.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: newtab
+      POSTGRES_USER: newtab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      # Bind-mount to a real TrueNAS dataset so the DB is covered by snapshots/backups
+      # (create the dataset first, e.g. /mnt/tank/apps/newtab/pgdata).
+      - ${PGDATA_HOST_PATH:?Set PGDATA_HOST_PATH to a TrueNAS dataset path}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newtab -d newtab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  server:
+    image: ghcr.io/${GHCR_OWNER:-danieltucker}/newtab-server:${IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: postgresql://newtab:${POSTGRES_PASSWORD}@postgres:5432/newtab
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET}
+      # Exact public URL users visit (scheme + host, no trailing slash). Must match for CORS.
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:?Set CLIENT_ORIGIN to your https URL}
+      # Serving over HTTPS -> keep true so auth cookies get the Secure flag.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Proxy hops in front of the server: your reverse proxy + the client nginx = 2.
+      # Adjust if your edge differs (e.g. Cloudflare Tunnel changes the count).
+      TRUST_PROXY: ${TRUST_PROXY:-2}
+      # Close signups after you create your account(s).
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+      # Console ping/tracert endpoints — keep false on an internet-facing deployment.
+      CONSOLE_ENABLED: ${CONSOLE_ENABLED:-false}
+      PORT: 3001
+      NODE_ENV: production
+    # No host port — the server is reached only via the client's nginx (/api proxy).
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    image: ghcr.io/${GHCR_OWNER:-danieltucker}/newtab-client:${IMAGE_TAG:-latest}
+    ports:
+      # host:container — point your HTTPS reverse proxy at http://<truenas-ip>:${APP_PORT}.
+      # Do NOT use 80/443: those belong to the TrueNAS web UI.
+      - "${APP_PORT:-30080}:80"
+    depends_on:
+      - server
+    restart: unless-stopped
