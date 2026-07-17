@@ -25,6 +25,8 @@ services:
       PORT: 3001
       NODE_ENV: production
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # One proxy hop in this stack (the client nginx) — lets rate limiting see real client IPs.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
     depends_on:
       postgres:
         condition: service_healthy

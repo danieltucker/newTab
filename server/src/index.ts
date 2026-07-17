@@ -19,6 +19,15 @@ import accountRoutes from './routes/account';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Behind reverse proxies, trust the configured number of hops so req.ip resolves
+// to the real client (used for per-IP rate limiting) instead of the nearest proxy.
+// Leave unset for local dev (direct connection); set to the proxy count otherwise:
+// 1 = client nginx only (local docker-compose), 2 = reverse proxy + nginx (prod).
+if (process.env.TRUST_PROXY) {
+  const hops = Number(process.env.TRUST_PROXY);
+  app.set('trust proxy', Number.isNaN(hops) ? process.env.TRUST_PROXY : hops);
+}
+
 app.use(helmet());
 
 app.use(cors({
