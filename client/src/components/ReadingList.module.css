@@ -270,20 +270,26 @@
   to   { transform: scaleX(0); }
 }
 
-/* ── Card footer — meta on top, traffic-light actions on their own line ── */
+/* ── Card footer — source meta anchored at the bottom ── */
 .cardFooter {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 9px;
   padding: 8px 16px 12px;
   margin-top: auto;
 }
 
+/* ── Window-style controls — a cluster of grey buttons pinned to the card's
+   top-right. Over cover art they float on top; on art-less cards the .noHero
+   rule reserves top padding so they push the text down instead. ── */
 .cardActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
   display: flex;
-  gap: 6px;
-  opacity: 0.75;
+  gap: 4px;
+  opacity: 0.85;
   transition: opacity 0.12s;
 }
 
@@ -292,44 +298,41 @@
   opacity: 1;
 }
 
-/* Traffic lights — red / yellow / green with a subtle top-lit gradient.
-   Glyphs are iOS-style background-tinted: a dark mix of the button's own
-   hue, so they read as part of the light rather than grey overlays. */
 .actionBtn {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: none;
-  font-size: 10px;
-  font-weight: 700;
+  width: 30px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklab, var(--border) 85%, transparent);
+  background: color-mix(in oklab, var(--surface) 80%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: filter 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
 .actionBtn svg {
   stroke-width: 2;
 }
 
+/* Grey at rest; each button reveals its accent on hover, delete goes red */
 .actionBtn:hover {
-  filter: saturate(1.15) brightness(1.08);
+  background: color-mix(in oklab, var(--accent) 85%, transparent);
+  border-color: transparent;
+  color: #fff;
 }
 
-.deleteBtn {
-  background: linear-gradient(180deg, #e07a72, #cf5b52);
-  color: color-mix(in oklab, #cf5b52 52%, black);
+.deleteBtn:hover {
+  background: #e5484d;
 }
 
-.archiveBtn {
-  background: linear-gradient(180deg, #e3bb59, #d09c36);
-  color: color-mix(in oklab, #d09c36 48%, black);
-}
-
-.editBtn {
-  background: linear-gradient(180deg, #5cc06d, #3da44f);
-  color: color-mix(in oklab, #3da44f 50%, black);
+/* Reserve top space on art-less card/magazine cards so the controls sit above
+   the text rather than over it (list layout keeps its own inline row) */
+.grid .cardWrap.noHero .card,
+.gridMagazine .cardWrap.noHero .card {
+  padding-top: 42px;
 }
 
 /* ── Post-read overlay — offered when you return from an article ── */
@@ -376,10 +379,24 @@
   100% { transform: translateY(96%) scaleY(0.08); opacity: 0; }
 }
 
+/* Clamp the whole prompt as one block so a long headline can't blow out the
+   card, while the "?" stays attached to the title on the same line */
 .postReadTitle {
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
+  text-align: center;
+  line-height: 1.35;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The article's own title, emphasized within the prompt */
+.postReadItemTitle {
+  color: var(--text);
 }
 
 .postReadBtns {
@@ -541,6 +558,15 @@
   gap: 14px;
 }
 
+/* No cover art to float over in a row — drop the controls back into the flow
+   at the right end, but keep the grey-button look */
+.gridList .cardActions {
+  position: static;
+  flex-shrink: 0;
+  padding-right: 12px;
+  opacity: 1;
+}
+
 /* The wrap is the card surface — content link on top, footer row below,
    so actions get real layout space instead of overlaying content */
 .cardWrap {
@@ -652,22 +678,8 @@
   .grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Touch devices: hover never fires — keep actions fully visible, and expand
-   each button's tap target to ~40px without growing its visual size.
+/* Touch devices: hover never fires — keep actions fully visible.
    Must stay at the end of the file to outrank the dimmed base rule. */
 @media (hover: none) {
-  .cardActions { opacity: 1; gap: 10px; }
-  .actionBtn { position: relative; }
-  .actionBtn::after {
-    content: '';
-    position: absolute;
-    inset: -9px;
-  }
-}
-
-/* Restore (unarchive) — sits in the yellow slot like archive; the lifted
-   arrow icon is what distinguishes it */
-.restoreBtn {
-  background: linear-gradient(180deg, #e3bb59, #d09c36);
-  color: color-mix(in oklab, #d09c36 48%, black);
+  .cardActions { opacity: 1; }
 }

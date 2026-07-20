@@ -303,11 +303,14 @@ function ArticleCard({ article, variant, onSave, onDismiss }: {
   const showSnippet = !!article.snippet && (
     variant === 'feature' || variant === 'brief' || variant === 'text' || article.title.length < 60
   );
+  const hasHero = showImage && !!article.imageUrl;
   const wrapClass = [
     styles.cardWrap,
     variant === 'feature' ? styles.featureWrap : '',
     variant === 'brief' ? styles.briefWrap : '',
     variant === 'text' ? styles.textWrap : '',
+    // No cover art → reserve top space so the floating controls push text down
+    !hasHero ? styles.noHero : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -350,19 +353,20 @@ function ArticleCard({ article, variant, onSave, onDismiss }: {
             <span className={styles.date}>{relativeDate(article.pubDate)}</span>
           </div>
         </div>
+        {/* Floating window-style controls — top-right, over the cover art */}
         <div className={styles.cardActions}>
-          <button className={`${styles.actionBtn} ${styles.dismissBtn}`} onClick={onDismiss} aria-label="Dismiss" title="Dismiss">
-            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M1 1l10 10M11 1L1 11"/>
-            </svg>
-          </button>
           <button
-            className={`${styles.actionBtn} ${styles.saveBtn}`}
+            className={styles.actionBtn}
             onClick={onSave}
             aria-label="Save to reading list"
             title="Save to reading list"
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button className={`${styles.actionBtn} ${styles.dismissBtn}`} onClick={onDismiss} aria-label="Dismiss" title="Dismiss">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M1 1l10 10M11 1L1 11"/>
+            </svg>
           </button>
         </div>
       </div>

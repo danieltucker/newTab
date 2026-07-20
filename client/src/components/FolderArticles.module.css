@@ -114,8 +114,12 @@
 
 .gridList .domain { max-width: 180px; }
 
+/* No cover art to float over in a row — drop the controls back into the flow
+   at the right end, but keep the grey-button look */
 .gridList .cardActions {
-  gap: 6px;
+  position: static;
+  flex-shrink: 0;
+  opacity: 1;
 }
 
 /* ── Magazine layout — editorial grid: wide features, full-text briefs,
@@ -214,11 +218,17 @@
   transform: translateY(-3px);
 }
 
-/* ── Action buttons — traffic lights on their own line, bottom left ── */
+/* ── Window-style controls — a cluster of grey buttons pinned to the card's
+   top-right. Over cover art they float on top; on art-less cards the .noHero
+   rule reserves top padding so they push the text down instead. ── */
 .cardActions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
   display: flex;
-  gap: 6px;
-  opacity: 0.75;
+  gap: 4px;
+  opacity: 0.85;
   transition: opacity 0.12s;
 }
 
@@ -227,43 +237,41 @@
   opacity: 1;
 }
 
-/* Red / green with a subtle top-lit gradient. Glyphs are iOS-style
-   background-tinted: a dark mix of the button's own hue, so they read
-   as part of the light rather than grey overlays. */
 .actionBtn {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: none;
+  width: 30px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklab, var(--border) 85%, transparent);
+  background: color-mix(in oklab, var(--surface) 80%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: filter 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
 .actionBtn svg {
   stroke-width: 2.2;
 }
 
+/* Grey at rest; save reveals the accent on hover, dismiss goes red */
 .actionBtn:hover {
-  filter: saturate(1.15) brightness(1.08);
+  background: color-mix(in oklab, var(--accent) 85%, transparent);
+  border-color: transparent;
+  color: #fff;
 }
 
-.dismissBtn {
-  background: linear-gradient(180deg, #e07a72, #cf5b52);
-  color: color-mix(in oklab, #cf5b52 52%, black);
+.dismissBtn:hover {
+  background: #e5484d;
 }
 
-.saveBtn {
-  background: linear-gradient(180deg, #5cc06d, #3da44f);
-  color: color-mix(in oklab, #3da44f 50%, black);
-}
-
-.savedBtn {
-  background: linear-gradient(180deg, #5cc06d, #3da44f);
-  color: color-mix(in oklab, #3da44f 50%, black);
-  cursor: default;
+/* Reserve top space on art-less cards so the controls sit above the text
+   rather than over it (list layout keeps its own inline row) */
+.grid .cardWrap.noHero .card,
+.gridMagazine .cardWrap.noHero .card {
+  padding-top: 42px;
 }
 
 /* ── Card ── */
@@ -438,17 +446,10 @@
   .grid { columns: 2; column-width: auto; }
 }
 
-/* Touch devices: hover never fires — keep actions fully visible, and expand
-   each button's tap target to ~40px without growing its visual size.
+/* Touch devices: hover never fires — keep actions fully visible.
    Must stay after the dimmed base rule to outrank it. */
 @media (hover: none) {
-  .cardActions { opacity: 1; gap: 10px; }
-  .actionBtn { position: relative; }
-  .actionBtn::after {
-    content: '';
-    position: absolute;
-    inset: -8px;
-  }
+  .cardActions { opacity: 1; }
 }
 
 /* Filter dropdowns themselves live in FilterDropdown.module.css */

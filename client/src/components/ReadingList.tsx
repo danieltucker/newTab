@@ -45,19 +45,21 @@ function magazineVariants(items: ReadingListItem[]): MagVariant[] {
   return items.map(item => {
     const readTime = parseInt(item.readTime, 10) || 0;
     const notesLen = item.notes?.length ?? 0;
-    // Short notes run in full as a brief
-    if (notesLen > 0 && notesLen <= 200 && readTime <= 2) {
+    const hasImage = !!item.imageUrl;
+    // Short notes on an art-less item run in full as a brief
+    if (!hasImage && notesLen > 0 && notesLen <= 200 && readTime <= 2) {
       sinceFeature++;
       return 'brief';
     }
-    const featureWorthy = readTime >= 4 || notesLen >= 240 || hashId(item.id) % 3 === 0;
+    // Features fill a wide banner, so they need artwork
+    const featureWorthy = hasImage && (readTime >= 4 || notesLen >= 240 || hashId(item.id) % 3 === 0);
     if (featureWorthy && sinceFeature >= 4) {
       sinceFeature = 0;
       return 'feature';
     }
     sinceFeature++;
-    if (!item.imageUrl) return 'text';
-    return hashId(item.id) % 4 === 0 ? 'text' : 'standard';
+    // Anything with a cover shows it; art-less items become text cards
+    return hasImage ? 'standard' : 'text';
   });
 }
 
@@ -124,6 +126,10 @@ interface CardProps {
 function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostReadAction, onOpened, onDelete, onUndo, onArchive, onEdit, articleOpenMode = 'new-tab', onOpenArticle }: CardProps) {
   const tags = parseTags(item.tag);
 
+  // Magazine text/brief variants stay type-only; everything else shows art when it exists
+  const showImage = !!item.imageUrl &&
+    (variant === undefined || variant === 'feature' || variant === 'standard');
+
   const wrapClass = [
     styles.cardWrap,
     variant === 'feature' ? styles.featureWrap : '',
@@ -131,14 +137,13 @@ function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostRead
     item.archived ? styles.archivedCard : '',
     isPendingDelete ? styles.pendingDelete : '',
     postReadState ? styles.postReadCard : '',
+    // No cover art → reserve top space so the floating controls push text down
+    // instead of overlapping it
+    !showImage ? styles.noHero : '',
   ].filter(Boolean).join(' ');
 
   // Unique name lets view transitions track this card across reflows
   const vtStyle = { viewTransitionName: `rl-${item.id.replace(/[^a-zA-Z0-9_-]/g, '')}` } as React.CSSProperties;
-
-  // Magazine text/brief variants stay type-only; everything else shows art when it exists
-  const showImage = !!item.imageUrl &&
-    (variant === undefined || variant === 'feature' || variant === 'standard');
 
   function handleCardClick(e: React.MouseEvent) {
     onOpened?.(item.id);
@@ -197,39 +202,45 @@ function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostRead
           />
           {item.source}{item.readTime ? ` · ${item.readTime}` : ''}
         </div>
-        {!isPendingDelete && (
-          <div className={styles.cardActions}>
-            <button
-              className={`${styles.actionBtn} ${styles.deleteBtn}`}
-              aria-label="Remove article"
-              title="Delete"
-              onClick={() => onDelete(item.id)}
-            >
-              ✕
-            </button>
-            <button
-              className={`${styles.actionBtn} ${item.archived ? styles.restoreBtn : styles.archiveBtn}`}
-              aria-label={item.archived ? 'Restore to reading list' : 'Archive'}
-              title={item.archived ? 'Restore to reading list' : 'Archive'}
-              onClick={() => onArchive(item.id, !item.archived)}
-            >
-              {item.archived ? <RestoreIcon /> : <ArchiveIcon />}
-            </button>
-            <button
-              className={`${styles.actionBtn} ${styles.editBtn}`}
-              aria-label="Edit article"
-              title="Edit"
-              onClick={() => onEdit(item)}
-            >
-              <PencilIcon />
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Floating window-style controls — top-right, over the cover art */}
+      {!isPendingDelete && (
+        <div className={styles.cardActions}>
+          <button
+            className={styles.actionBtn}
+            aria-label={item.archived ? 'Restore to reading list' : 'Archive'}
+            title={item.archived ? 'Restore to reading list' : 'Archive'}
+            onClick={() => onArchive(item.id, !item.archived)}
+          >
+            {item.archived ? <RestoreIcon /> : <ArchiveIcon />}
+          </button>
+          <button
+            className={styles.actionBtn}
+            aria-label="Edit article"
+            title="Edit"
+            onClick={() => onEdit(item)}
+          >
+            <PencilIcon />
+          </button>
+          <button
+            className={`${styles.actionBtn} ${styles.deleteBtn}`}
+            aria-label="Remove article"
+            title="Delete"
+            onClick={() => onDelete(item.id)}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M1 1l10 10M11 1L1 11"/>
+            </svg>
+          </button>
+        </div>
+      )}
 
       {postReadState && !isPendingDelete && (
         <div className={`${styles.postReadOverlay} ${postReadState === 'leaving' ? styles.postReadLeaving : ''}`}>
-          <div className={styles.postReadTitle}>Done with this one?</div>
+          <div className={styles.postReadTitle}>
+            Are you done with <span className={styles.postReadItemTitle}>{item.title}</span>?
+          </div>
           <div className={styles.postReadBtns}>
             <button className={styles.postReadArchiveBtn} onClick={() => onPostReadAction?.('archive')}>
               Archive
