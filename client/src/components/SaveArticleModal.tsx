@@ -6,9 +6,10 @@ interface Props {
   url: string;
   title: string;
   source: string;
+  imageUrl?: string;
   initialTag?: string;
   initialReadTime?: string;
-  onSave: (data: { url: string; title: string; source: string; readTime: string; tag: string }) => Promise<void>;
+  onSave: (data: { url: string; title: string; source: string; readTime: string; tag: string; imageUrl: string }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -16,7 +17,7 @@ function parseTags(raw: string): string[] {
   return raw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
 }
 
-export default function SaveArticleModal({ url, title, source, initialTag = '', initialReadTime = '', onSave, onClose }: Props) {
+export default function SaveArticleModal({ url, title, source, imageUrl = '', initialTag = '', initialReadTime = '', onSave, onClose }: Props) {
   const [titleVal, setTitleVal]   = useState(title);
   const [sourceVal, setSourceVal] = useState(source);
   const [tags, setTags]           = useState<string[]>(parseTags(initialTag));
@@ -31,7 +32,7 @@ export default function SaveArticleModal({ url, title, source, initialTag = '', 
       : tags;
     setSaving(true);
     try {
-      await onSave({ url, title: titleVal.trim(), source: sourceVal.trim(), readTime: readTime.trim(), tag: finalTags.join(',') });
+      await onSave({ url, title: titleVal.trim(), source: sourceVal.trim(), readTime: readTime.trim(), tag: finalTags.join(','), imageUrl });
     } finally {
       setSaving(false);
     }

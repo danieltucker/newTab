@@ -132,6 +132,7 @@ model ReadingListItem {
   readTime String
   tag      String
   notes    String   @default("")
+  imageUrl String   @default("")
   archived Boolean  @default(false)
   savedAt  DateTime @default(now())
 

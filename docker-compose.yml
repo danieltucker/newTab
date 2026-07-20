@@ -27,6 +27,11 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # One proxy hop in this stack (the client nginx) — lets rate limiting see real client IPs.
       TRUST_PROXY: ${TRUST_PROXY:-1}
+      # One-time bootstrap secret for the first admin. While no admin exists,
+      # any signed-in user can claim admin from Settings → Account by entering
+      # this token. Once an admin exists the token is inert — manage further
+      # admins from the in-app admin panel. Generate with: openssl rand -hex 24
+      ADMIN_SETUP_TOKEN: ${ADMIN_SETUP_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

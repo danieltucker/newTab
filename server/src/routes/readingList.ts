@@ -14,12 +14,27 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   res.json(items);
 });
 
+// Empty string is allowed (no image); otherwise must be a sane http(s) URL
+function validImageUrl(v: unknown): string | null {
+  if (v === undefined || v === null || v === '') return '';
+  if (typeof v !== 'string' || v.length > 2048) return null;
+  try {
+    const parsed = new URL(v);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  } catch {
+    return null;
+  }
+  return v;
+}
+
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const { url, title, source, readTime, tag } = req.body;
+  const { url, title, source, readTime, tag, imageUrl } = req.body;
   if (!url || !title) { res.status(400).json({ error: 'url and title required' }); return; }
   if (typeof url !== 'string' || url.length > 2048) { res.status(400).json({ error: 'url must be ≤2048 characters' }); return; }
   if (typeof title !== 'string' || title.length > 500) { res.status(400).json({ error: 'title must be ≤500 characters' }); return; }
   if (source !== undefined && typeof source === 'string' && source.length > 200) { res.status(400).json({ error: 'source must be ≤200 characters' }); return; }
+  const image = validImageUrl(imageUrl);
+  if (image === null) { res.status(400).json({ error: 'imageUrl must be an http(s) URL ≤2048 characters' }); return; }
 
   // Only allow http/https — blocks javascript:, data:, vbscript:, etc.
   try {
@@ -39,6 +54,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       source: source || '',
       readTime: readTime || '',
       tag: tag || '',
+      imageUrl: image,
     },
   });
   res.status(201).json(item);

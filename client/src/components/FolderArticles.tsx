@@ -3,6 +3,7 @@ import { apiFetch } from '../services/api';
 import { FeedArticle } from '../types';
 import { faviconUrl } from '../utils/color';
 import LayoutSwitch, { ListIcon, CardsIcon, MagazineIcon } from './LayoutSwitch';
+import FilterDropdown from './FilterDropdown';
 import styles from './FolderArticles.module.css';
 
 export type RssLayout = 'list' | 'cards' | 'magazine';
@@ -13,9 +14,12 @@ const LAYOUT_OPTIONS = [
   { value: 'magazine' as const, title: 'Magazine', icon: <MagazineIcon /> },
 ];
 
+// Above this many topics, the chip row collapses into a searchable dropdown
+const MAX_TOPIC_CHIPS = 12;
+
 interface Props {
   folderId: string;
-  onSaveArticle: (a: { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null }, markSaved: () => void) => void;
+  onSaveArticle: (a: { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null; imageUrl: string | null }, markSaved: () => void) => void;
   onArticlesLoaded?: (articles: FeedArticle[]) => void;
   refreshKey?: number;
   pageSize?: number;
@@ -42,6 +46,46 @@ function domainOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 }
 
+// ── Magazine layout variants ──────────────────────────────────────────
+type MagVariant = 'feature' | 'standard' | 'text' | 'brief';
+
+// Cheap stable hash so a card keeps its look across refreshes
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// Editorial mix: long reads with artwork become wide features (spaced out so
+// they don't stack), short pieces run as full-text briefs, and the rest
+// alternate between image and text-only cards on a stable per-article hash.
+function magazineVariants(articles: FeedArticle[]): MagVariant[] {
+  let sinceFeature = 4; // lets the first feature lead the page
+  return articles.map(a => {
+    const readTime = a.readTime ?? 0;
+    const snippetLen = a.snippet?.length ?? 0;
+    // The snippet is essentially the whole piece — run it in full. The server
+    // truncates long content to ~200 chars ending in "…", so a trailing
+    // ellipsis means there's more to read and it is NOT a brief.
+    const complete = snippetLen > 0 && !/(…|\.\.\.)\s*$/.test(a.snippet!);
+    if (complete && snippetLen <= 220 && readTime <= 2) {
+      sinceFeature++;
+      return 'brief';
+    }
+    // Long reads and meaty summaries always qualify; the hash fallback keeps
+    // features appearing (~every screenful) on feeds of uniformly short items
+    const featureWorthy = !!a.imageUrl &&
+      (readTime >= 4 || snippetLen >= 240 || hashId(a.id) % 3 === 0);
+    if (featureWorthy && sinceFeature >= 4) {
+      sinceFeature = 0;
+      return 'feature';
+    }
+    sinceFeature++;
+    if (!a.imageUrl) return 'text';
+    return hashId(a.id) % 4 === 0 ? 'text' : 'standard';
+  });
+}
+
 export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10, layout = 'cards', onLayoutChange }: Props) {
   const seededFolders = useRef<Set<string>>(new Set());
   const [articles, setArticles]         = useState<FeedArticle[]>([]);
@@ -49,17 +93,23 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
   const [loading, setLoading]           = useState(true);
   const [loadingMore, setLoadingMore]   = useState(false);
   const [error, setError]               = useState('');
-  const [saved, setSaved]               = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeSource, setActiveSource] = useState<string | null>(null);
 
   const allCategories = useMemo(
     () => Array.from(new Set(articles.flatMap(a => a.categories))).sort(),
     [articles]
   );
 
-  const displayed = activeCategory
-    ? articles.filter(a => a.categories.includes(activeCategory))
-    : articles;
+  const allSources = useMemo(
+    () => Array.from(new Set(articles.map(a => a.source).filter(Boolean))).sort(),
+    [articles]
+  );
+
+  const displayed = articles.filter(a =>
+    (!activeCategory || a.categories.includes(activeCategory)) &&
+    (!activeSource || a.source === activeSource)
+  );
 
   const load = useCallback(async (offset = 0, existing: FeedArticle[] = []) => {
     offset === 0 ? setLoading(true) : setLoadingMore(true);
@@ -82,9 +132,24 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
   useEffect(() => {
     setArticles([]);
     setTotal(0);
-    setSaved(new Set());
+    setActiveCategory(null);
+    setActiveSource(null);
     load(0, []);
   }, [folderId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Infinite scroll — when the sentinel below the list enters the viewport,
+  // fetch the next page (the button remains as a manual fallback)
+  const hasMore = articles.length < total;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loading) return;
+    const obs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !loadingMore) load(articles.length, articles);
+    }, { rootMargin: '300px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, loading, loadingMore, articles, load]);
 
   // Background load for search seeding — fires at most once per folder per session
   useEffect(() => {
@@ -99,10 +164,11 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
   }, [folderId, onArticlesLoaded]);
 
   function handleSave(a: FeedArticle) {
-    if (saved.has(a.id)) return;
     onSaveArticle(
-      { id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories, readTime: a.readTime },
-      () => setSaved(prev => new Set(prev).add(a.id))
+      { id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories, readTime: a.readTime, imageUrl: a.imageUrl },
+      // Once it's in the reading list it leaves the feed (dismissed server-side,
+      // so it stays gone across refreshes)
+      () => handleDismiss(a.id)
     );
   }
 
@@ -133,11 +199,11 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
     </div>
   );
 
-  const hasMore = articles.length < total;
-
   const gridClass = layout === 'list' ? styles.gridList
     : layout === 'magazine' ? styles.gridMagazine
     : styles.grid;
+
+  const variants = layout === 'magazine' ? magazineVariants(displayed) : null;
 
   return (
     <div className={styles.wrap}>
@@ -151,15 +217,17 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
         )}
       </div>
 
-      {allCategories.length > 1 && (
+      {(allCategories.length > 1 || allSources.length > 1) && (
         <div className={styles.chips}>
-          <button
-            className={`${styles.chip} ${activeCategory === null ? styles.chipActive : ''}`}
-            onClick={() => setActiveCategory(null)}
-          >
-            All
-          </button>
-          {allCategories.map(c => (
+          {allCategories.length > 1 && (
+            <button
+              className={`${styles.chip} ${activeCategory === null ? styles.chipActive : ''}`}
+              onClick={() => setActiveCategory(null)}
+            >
+              All
+            </button>
+          )}
+          {allCategories.length > 1 && allCategories.length <= MAX_TOPIC_CHIPS && allCategories.map(c => (
             <button
               key={c}
               className={`${styles.chip} ${activeCategory === c ? styles.chipActive : ''}`}
@@ -168,36 +236,59 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
               {c}
             </button>
           ))}
+          {allCategories.length > MAX_TOPIC_CHIPS && (
+            <FilterDropdown
+              label="Topics"
+              options={allCategories}
+              value={activeCategory}
+              onChange={setActiveCategory}
+              searchable
+            />
+          )}
+          {allSources.length > 1 && (
+            <div className={styles.sourceFilter}>
+              <FilterDropdown
+                label="All sites"
+                options={allSources}
+                value={activeSource}
+                onChange={setActiveSource}
+                searchable={allSources.length > 8}
+                align="right"
+              />
+            </div>
+          )}
         </div>
       )}
 
       <div className={gridClass}>
-        {displayed.map(a => (
+        {displayed.map((a, i) => (
           <ArticleCard
             key={a.id}
             article={a}
-            isSaved={saved.has(a.id)}
-            showImage={layout === 'magazine'}
+            variant={variants?.[i]}
             onSave={() => handleSave(a)}
             onDismiss={() => handleDismiss(a.id)}
           />
         ))}
       </div>
       {hasMore && (
-        <button
-          className={styles.moreBtn}
-          onClick={() => load(articles.length, articles)}
-          disabled={loadingMore}
-        >
-          {loadingMore ? 'Loading…' : `Load more  ·  ${total - articles.length} remaining`}
-        </button>
+        <>
+          <div ref={sentinelRef} aria-hidden />
+          <button
+            className={styles.moreBtn}
+            onClick={() => load(articles.length, articles)}
+            disabled={loadingMore}
+          >
+            {loadingMore ? 'Loading…' : `Load more  ·  ${total - articles.length} remaining`}
+          </button>
+        </>
       )}
     </div>
   );
 }
 
-function ArticleCard({ article, isSaved, showImage, onSave, onDismiss }: {
-  article: FeedArticle; isSaved: boolean; showImage?: boolean;
+function ArticleCard({ article, variant, onSave, onDismiss }: {
+  article: FeedArticle; variant?: MagVariant;
   onSave: () => void; onDismiss: () => void;
 }) {
   const domain = domainOf(article.link);
@@ -206,28 +297,21 @@ function ArticleCard({ article, isSaved, showImage, onSave, onDismiss }: {
   // URLs can go stale when the API path changes.
   const favicon = domain ? faviconUrl(domain) : feedDomain ? faviconUrl(feedDomain) : '';
 
-  return (
-    <div className={styles.cardWrap}>
-      <div className={styles.cardActions}>
-        <button
-          className={`${styles.actionBtn} ${isSaved ? styles.savedBtn : styles.saveBtn}`}
-          onClick={onSave}
-          disabled={isSaved}
-          title={isSaved ? 'Saved' : 'Save to reading list'}
-        >
-          {isSaved ? (
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="1.5 6 4.5 9 10.5 3"/></svg>
-          ) : (
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-          )}
-        </button>
-        <button className={`${styles.actionBtn} ${styles.dismissBtn}`} onClick={onDismiss} title="Dismiss">
-          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <path d="M1 1l10 10M11 1L1 11"/>
-          </svg>
-        </button>
-      </div>
+  const showImage = variant === 'feature' || variant === 'standard';
+  // Magazine text variants always run their snippet; elsewhere keep the
+  // original heuristic of only padding out short titles
+  const showSnippet = !!article.snippet && (
+    variant === 'feature' || variant === 'brief' || variant === 'text' || article.title.length < 60
+  );
+  const wrapClass = [
+    styles.cardWrap,
+    variant === 'feature' ? styles.featureWrap : '',
+    variant === 'brief' ? styles.briefWrap : '',
+    variant === 'text' ? styles.textWrap : '',
+  ].filter(Boolean).join(' ');
 
+  return (
+    <div className={wrapClass}>
       <div className={styles.card}>
         {showImage && article.imageUrl && (
           <img
@@ -249,7 +333,7 @@ function ArticleCard({ article, isSaved, showImage, onSave, onDismiss }: {
         <a href={article.link} target="_blank" rel="noopener noreferrer" className={styles.title}>
           {article.title}
         </a>
-        {article.snippet && article.title.length < 60 && (
+        {showSnippet && (
           <p className={styles.snippet}>{article.snippet}</p>
         )}
         {article.readTime != null && (
@@ -265,6 +349,21 @@ function ArticleCard({ article, isSaved, showImage, onSave, onDismiss }: {
           <div className={styles.cardRight}>
             <span className={styles.date}>{relativeDate(article.pubDate)}</span>
           </div>
+        </div>
+        <div className={styles.cardActions}>
+          <button className={`${styles.actionBtn} ${styles.dismissBtn}`} onClick={onDismiss} aria-label="Dismiss" title="Dismiss">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M1 1l10 10M11 1L1 11"/>
+            </svg>
+          </button>
+          <button
+            className={`${styles.actionBtn} ${styles.saveBtn}`}
+            onClick={onSave}
+            aria-label="Save to reading list"
+            title="Save to reading list"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          </button>
         </div>
       </div>
     </div>

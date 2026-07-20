@@ -34,6 +34,15 @@
   --grain-opacity: 0.05;
 }
 
+/* Z-index scale — every overlay picks a band; never use raw numbers.
+   background(0) < page(1) < sticky < content-overlay < modal < top */
+:root {
+  --z-sticky: 40;           /* sticky search bar */
+  --z-content-overlay: 50;  /* dropdown menus and panels inside page content */
+  --z-modal: 200;           /* standard dialogs (settings, editors, admin) */
+  --z-top: 300;             /* fullscreen overlays: console, reader, import */
+}
+
 /* Base */
 *, *::before, *::after {
   box-sizing: border-box;

@@ -10,17 +10,18 @@ import AddLinkModal from '../components/AddLinkModal';
 import NewFolderModal from '../components/NewFolderModal';
 import EditBookmarkModal from '../components/EditBookmarkModal';
 import EditFolderModal from '../components/EditFolderModal';
-import SettingsModal from '../components/SettingsModal';
+import SettingsModal, { Section as SettingsSection, UserProfile } from '../components/SettingsModal';
 import ImportBookmarksModal from '../components/ImportBookmarksModal';
 import ArticleModal from '../components/ArticleModal';
 import Console from '../components/Console';
 import FolderArticles from '../components/FolderArticles';
 import SaveArticleModal from '../components/SaveArticleModal';
+import AdminModal from '../components/AdminModal';
 import { useFolders } from '../hooks/useFolders';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useReadingList } from '../hooks/useReadingList';
 import { useSettings } from '../hooks/useSettings';
-import { apiGet } from '../services/api';
+import { apiGet, apiFetch } from '../services/api';
 import { Bookmark, Folder, FeedArticle } from '../types';
 import { ThemeSetting, ResolvedTheme } from '../App';
 
@@ -37,13 +38,14 @@ const BLOB_MOTION = [
 interface Props {
   accessToken: string;
   username: string;
+  isAdmin?: boolean;
   themeSetting: ThemeSetting;
   resolvedTheme: ResolvedTheme;
   onSetTheme: (t: ThemeSetting) => void;
   onLogout: () => void;
 }
 
-export default function NewTabPage({ accessToken, username, themeSetting, resolvedTheme, onSetTheme, onLogout }: Props) {
+export default function NewTabPage({ accessToken, username, isAdmin, themeSetting, resolvedTheme, onSetTheme, onLogout }: Props) {
   const { settings, update: updateSetting, loaded: settingsLoaded } = useSettings(accessToken);
 
   // Sync theme setting from server on first load
@@ -66,7 +68,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     }
   }, [folders, activeFolderId]);
 
-  const { bookmarks, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, checkFeed, markVisited } = useBookmarks(accessToken, activeFolderId);
+  const { bookmarks, setBookmarks, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, checkFeed, markVisited } = useBookmarks(accessToken, activeFolderId);
   const { items: readingList, saveItem, updateItem, archiveItem, removeItem } = useReadingList(accessToken);
 
   const CACHE_KEY = `bfc_${username}`;
@@ -111,6 +113,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
 
   useEffect(() => {
     if (!activeFolderId) return;
+    if (settings.rssEnabled === false) return;
     const STALE_MS = 30 * 60 * 1000;
 
     const runCheck = () => {
@@ -137,7 +140,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
   }
 
   // Pending feed article save (shows SaveArticleModal)
-  type PendingSave = { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null; markSaved: () => void };
+  type PendingSave = { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null; imageUrl: string | null; markSaved: () => void };
   const [savingArticle, setSavingArticle] = useState<PendingSave | null>(null);
 
   // Bookmarklet mode — true when this window was opened by a bookmarklet
@@ -148,7 +151,16 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
   const [showAddLink, setShowAddLink] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [showImport, setShowImport] = useState(false);
+
+  // Profile (avatar) for the top bar; kept in sync by SettingsModal's Account tab
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  useEffect(() => {
+    if (!accessToken) return;
+    apiGet<UserProfile>('/api/v1/account').then(setProfile).catch(() => {});
+  }, [accessToken]);
   const [articleUrl, setArticleUrl] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
   const [consoleFading, setConsoleFading] = useState(false);
@@ -180,7 +192,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     if (intent === 'save-article') {
       let source = '';
       try { source = new URL(url).hostname.replace(/^www\./, ''); } catch {}
-      setSavingArticle({ id: '', url, title, source, categories: [], readTime: null, markSaved: () => { if (window.opener) window.close(); } });
+      setSavingArticle({ id: '', url, title, source, categories: [], readTime: null, imageUrl: null, markSaved: () => { if (window.opener) window.close(); } });
     } else if (intent === 'add-bookmark') {
       setBookmarkletAddUrl(url);
       setShowAddLink(true);
@@ -297,6 +309,19 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
     await updateFolder(id, updates);
   }
 
+  function handleMarkFolderRead(folderId: string) {
+    // Optimistic: clear badges immediately, persist in the background
+    apiFetch(`/api/v1/folders/${folderId}/mark-read`, { method: 'POST' }).catch(() => {});
+    if (folderId === activeFolderId) {
+      setBookmarks(prev => prev.map(b => ({ ...b, unreadCount: 0 })));
+    }
+    setBookmarksByFolder(prev => {
+      const next = { ...prev, [folderId]: (prev[folderId] ?? []).map(b => ({ ...b, unreadCount: 0 })) };
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
   async function handleDeleteFolder(id: string) {
     await deleteFolder(id);
     setBookmarksByFolder(prev => {
@@ -381,8 +406,24 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
       <div className={styles.content}>
       {/* Top-right bar: username + icon buttons */}
       <div className={styles.topBar}>
-        <span className={styles.username}>{username}</span>
-        <button className={styles.iconBtn} onClick={() => setShowSettings(true)} title="Settings">
+        <button
+          className={styles.userBtn}
+          onClick={() => { setSettingsSection('account'); setShowSettings(true); }}
+          title="Account settings"
+        >
+          {profile?.avatar
+            ? <img src={profile.avatar} alt="" className={styles.userAvatar} />
+            : <span className={styles.userAvatarFallback}>{username.charAt(0).toUpperCase()}</span>}
+          <span className={styles.username}>{username}</span>
+        </button>
+        {isAdmin && (
+          <button className={styles.iconBtn} onClick={() => setShowAdmin(true)} title="Admin">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </button>
+        )}
+        <button className={styles.iconBtn} onClick={() => { setSettingsSection(undefined); setShowSettings(true); }} title="Settings">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -406,7 +447,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
             searchNewTab={settings.searchNewTab}
             bookmarks={Object.values(bookmarksByFolder).flat()}
             readingItems={readingList}
-            feedArticles={feedArticles.map(a => ({ id: a.id, url: a.link, title: a.title, source: a.source }))}
+            feedArticles={feedArticles.map(a => ({ id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories }))}
           />
         </div>
 
@@ -420,6 +461,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
               onNewFolder={() => setShowNewFolder(true)}
               onEditFolder={setEditingFolder}
               onDeleteFolder={handleDeleteFolder}
+              onMarkFolderRead={handleMarkFolderRead}
               onReorderFolders={reorderFolders}
               folderRefs={folderRefs}
             />
@@ -457,11 +499,28 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
                 onLayoutChange={l => updateSetting({ readingListLayout: l })}
               />
             </div>
-            {activeFolderId && (activeFolder?.feedUrls?.length ?? 0) > 0 && (
+            {settings.rssEnabled !== false && activeFolderId && (activeFolder?.feedUrls?.length ?? 0) > 0 && (
               <FolderArticles
                 key={activeFolderId}
                 folderId={activeFolderId}
-                onSaveArticle={(a, markSaved) => setSavingArticle({ ...a, markSaved })}
+                onSaveArticle={async (a, markSaved) => {
+                  if ((settings.saveArticleMode ?? 'dialog') === 'instant') {
+                    // Save with the article's own metadata — no dialog
+                    try {
+                      await saveItem({
+                        url: a.url,
+                        title: a.title,
+                        source: a.source,
+                        readTime: a.readTime != null ? `${a.readTime} min` : '',
+                        tag: a.categories.map(c => c.trim().toLowerCase()).filter(Boolean).join(','),
+                        imageUrl: a.imageUrl ?? '',
+                      });
+                      markSaved();
+                    } catch {}
+                  } else {
+                    setSavingArticle({ ...a, markSaved });
+                  }
+                }}
                 onArticlesLoaded={handleFeedArticlesLoaded}
                 refreshKey={feedRefreshKey}
                 pageSize={settings.rssFeedPageSize ?? 10}
@@ -547,6 +606,7 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
           url={savingArticle.url}
           title={savingArticle.title}
           source={savingArticle.source}
+          imageUrl={savingArticle.imageUrl ?? ''}
           initialTag={savingArticle.categories.join(',')}
           initialReadTime={savingArticle.readTime != null ? `${savingArticle.readTime} min` : ''}
           onSave={async data => {
@@ -563,7 +623,14 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
       )}
 
       {articleUrl && (
-        <ArticleModal url={articleUrl} onClose={() => setArticleUrl(null)} />
+        <ArticleModal
+          url={articleUrl}
+          onClose={() => {
+            setArticleUrl(null);
+            // Lets the reading list offer post-read actions on the card just read
+            window.dispatchEvent(new Event('article-reader-closed'));
+          }}
+        />
       )}
 
       {showSettings && (
@@ -572,7 +639,13 @@ export default function NewTabPage({ accessToken, username, themeSetting, resolv
           onUpdate={async (patch) => { if (patch.theme) handleSetTheme(patch.theme); await updateSetting(patch); }}
           onClose={() => setShowSettings(false)}
           onImport={() => { setShowSettings(false); setShowImport(true); }}
+          initialSection={settingsSection}
+          onProfileChange={setProfile}
         />
+      )}
+
+      {showAdmin && (
+        <AdminModal currentUsername={username} onClose={() => setShowAdmin(false)} />
       )}
 
       {showConsole && (

@@ -204,7 +204,14 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
     ? CMD_NAMES.filter(c => c.startsWith(firstToken) && c !== firstToken)
     : [];
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  // Focus lands when the open animation finishes (see shell onAnimationEnd) so
+  // the layout work focusing triggers can't contend with the first frames.
+  // With reduced motion there's no animation, so focus immediately.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      inputRef.current?.focus();
+    }
+  }, []);
 
   useEffect(() => {
     if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
@@ -292,7 +299,14 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
 
   return (
     <div className={styles.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`${styles.console} ${closing ? styles.consoleClosing : ''}`} onClick={e => e.stopPropagation()}>
+      {/* The shell owns all motion (transform/opacity only — compositor-run,
+          zero per-frame painting); the console inside is visually static */}
+      <div
+        className={`${styles.shell} ${closing ? styles.shellClosing : ''}`}
+        onClick={e => e.stopPropagation()}
+        onAnimationEnd={() => { if (!closing) inputRef.current?.focus(); }}
+      >
+      <div className={styles.console}>
 
         <div className={styles.header}>
           <span className={styles.headerTitle}>NEWT.AB CONSOLE</span>
@@ -346,6 +360,7 @@ export default function Console({ folders, theme, onSelectFolder, onSetTheme, on
           />
         </div>
 
+      </div>
       </div>
     </div>
   );

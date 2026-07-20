@@ -19,11 +19,12 @@ interface Props {
   onNewFolder: () => void;
   onEditFolder: (f: Folder) => void;
   onDeleteFolder: (id: string) => void;
+  onMarkFolderRead: (id: string) => void;
   onReorderFolders: (reordered: Folder[]) => void;
   folderRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
 }
 
-function FolderMenu({ folder, onEdit, onDelete }: { folder: Folder; onEdit: (f: Folder) => void; onDelete: (id: string) => void }) {
+function FolderMenu({ folder, onEdit, onDelete, onMarkRead }: { folder: Folder; onEdit: (f: Folder) => void; onDelete: (id: string) => void; onMarkRead: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -48,6 +49,9 @@ function FolderMenu({ folder, onEdit, onDelete }: { folder: Folder; onEdit: (f: 
       </button>
       {open && (
         <div className={styles.dropdown}>
+          <button className={styles.dropdownItem} onClick={e => { e.stopPropagation(); setOpen(false); onMarkRead(folder.id); }} onPointerDown={e => e.stopPropagation()}>
+            Mark as read
+          </button>
           <button className={styles.dropdownItem} onClick={e => { e.stopPropagation(); setOpen(false); onEdit(folder); }} onPointerDown={e => e.stopPropagation()}>
             Edit
           </button>
@@ -67,10 +71,11 @@ interface SortableFolderProps {
   onSelect: (id: string, el: HTMLElement) => void;
   onEdit: (f: Folder) => void;
   onDelete: (id: string) => void;
+  onMarkRead: (id: string) => void;
   folderRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
 }
 
-function SortableFolder({ folder, isActive, sites, onSelect, onEdit, onDelete, folderRefs }: SortableFolderProps) {
+function SortableFolder({ folder, isActive, sites, onSelect, onEdit, onDelete, onMarkRead, folderRefs }: SortableFolderProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: folder.id });
   const previewSites = sites.slice(0, 4);
 
@@ -124,14 +129,14 @@ function SortableFolder({ folder, isActive, sites, onSelect, onEdit, onDelete, f
         </div>
       </div>
 
-      <FolderMenu folder={folder} onEdit={onEdit} onDelete={onDelete} />
+      <FolderMenu folder={folder} onEdit={onEdit} onDelete={onDelete} onMarkRead={onMarkRead} />
     </div>
   );
 }
 
 export default function FolderSidebar({
   folders, activeFolderId, bookmarksByFolder, onSelectFolder, onNewFolder,
-  onEditFolder, onDeleteFolder, onReorderFolders, folderRefs,
+  onEditFolder, onDeleteFolder, onMarkFolderRead, onReorderFolders, folderRefs,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -172,6 +177,7 @@ export default function FolderSidebar({
               onSelect={onSelectFolder}
               onEdit={onEditFolder}
               onDelete={onDeleteFolder}
+              onMarkRead={onMarkFolderRead}
               folderRefs={folderRefs}
             />
           ))}

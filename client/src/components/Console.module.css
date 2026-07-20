@@ -1,16 +1,32 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  z-index: var(--z-top);
   display: flex;
   align-items: flex-start;
   padding: 15px;
 }
 
-.console {
+/* All motion lives on the shell as transform + opacity only — the two
+   properties Chromium/Edge animate entirely on the GPU compositor. The
+   liquid feel comes from squash-and-stretch (scaleY overshoot and settle),
+   not from morphing border-radius or clip-path: radius morphs repaint the
+   panel and its blurred shadows every frame (stutter on high-DPI/120Hz),
+   and clip-path morphs slice through the 1px border while in flight. */
+.shell {
   width: 100%;
   height: 42vh;
   min-height: 280px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.6);
+  transform-origin: top center;
+  will-change: transform, opacity;
+  animation: shellDown 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.console {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: #0d1117;
@@ -19,57 +35,30 @@
   overflow: hidden;
   font-family: 'IBM Plex Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.6);
-  transform-origin: top center;
-  animation: slideDown 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.consoleClosing {
-  animation: slideUp 0.32s cubic-bezier(0.6, 0, 0.8, 0.35) forwards;
+.shellClosing {
+  animation: shellUp 0.32s cubic-bezier(0.6, 0, 0.8, 0.35) forwards;
 }
 
-@keyframes slideDown {
-  0%   {
-    transform: translateY(-120%) scaleY(0.45);
-    border-radius: 10px 10px 50% 50%;
-    opacity: 0;
-  }
+@keyframes shellDown {
+  0%   { transform: translateY(-115%) scaleY(0.5); opacity: 0; }
   40%  { opacity: 1; }
-  68%  {
-    transform: translateY(8px) scaleY(1.03);
-    border-radius: 10px 10px 22px 22px;
-  }
-  84%  {
-    transform: translateY(-2px) scaleY(0.991);
-    border-radius: 10px 10px 13px 13px;
-  }
-  100% {
-    transform: translateY(0) scaleY(1);
-    border-radius: 10px;
-    opacity: 1;
-  }
+  62%  { transform: translateY(7px) scaleY(1.04); }
+  80%  { transform: translateY(-3px) scaleY(0.982); }
+  92%  { transform: translateY(1px) scaleY(1.006); }
+  100% { transform: translateY(0) scaleY(1); opacity: 1; }
 }
 
-@keyframes slideUp {
-  0%   {
-    transform: translateY(0) scaleY(1);
-    border-radius: 10px;
-    opacity: 1;
-  }
-  22%  {
-    transform: translateY(10px) scaleY(0.96);
-    border-radius: 10px 10px 28px 28px;
-    opacity: 1;
-  }
-  65%  {
-    border-radius: 10px 10px 50% 50%;
-    opacity: 0.5;
-  }
-  100% {
-    transform: translateY(-120%) scaleY(0.5);
-    border-radius: 10px 10px 50% 50%;
-    opacity: 0;
-  }
+@keyframes shellUp {
+  0%   { transform: translateY(0) scaleY(1); opacity: 1; }
+  22%  { transform: translateY(10px) scaleY(0.96); opacity: 1; }
+  65%  { opacity: 0.5; }
+  100% { transform: translateY(-115%) scaleY(0.5); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell, .shellClosing { animation: none; }
 }
 
 /* ── Header ── */

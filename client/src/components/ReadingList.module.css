@@ -193,7 +193,7 @@
   opacity: 0.6;
 }
 
-.archivedCard .card {
+.archivedCard {
   border-style: dashed;
 }
 
@@ -202,7 +202,8 @@
   pointer-events: none;
 }
 
-.pendingDelete .card {
+.pendingDelete .card,
+.pendingDelete .cardFooter {
   opacity: 0.07;
 }
 
@@ -269,49 +270,149 @@
   to   { transform: scaleX(0); }
 }
 
-/* ── Card action buttons ── */
-.cardActions {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+/* ── Card footer — meta on top, traffic-light actions on their own line ── */
+.cardFooter {
   display: flex;
-  gap: 4px;
-  opacity: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 16px 12px;
+  margin-top: auto;
+}
+
+.cardActions {
+  display: flex;
+  gap: 6px;
+  opacity: 0.75;
   transition: opacity 0.12s;
 }
 
-.cardWrap:hover .cardActions {
+.cardWrap:hover .cardActions,
+.cardWrap:focus-within .cardActions {
   opacity: 1;
 }
 
+/* Traffic lights — red / yellow / green with a subtle top-lit gradient.
+   Glyphs are iOS-style background-tinted: a dark mix of the button's own
+   hue, so they read as part of the light rather than grey overlays. */
 .actionBtn {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: none;
-  background: var(--surface2);
-  color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, color 0.12s;
+  transition: filter 0.12s;
 }
 
-.editBtn:hover {
-  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
-  color: var(--accent);
+.actionBtn svg {
+  stroke-width: 2;
 }
 
-.archiveBtn:hover {
-  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
-  color: var(--accent);
+.actionBtn:hover {
+  filter: saturate(1.15) brightness(1.08);
 }
 
-.deleteBtn:hover {
-  background: color-mix(in oklab, #FF4500 15%, var(--surface2));
-  color: #FF4500;
+.deleteBtn {
+  background: linear-gradient(180deg, #e07a72, #cf5b52);
+  color: color-mix(in oklab, #cf5b52 52%, black);
+}
+
+.archiveBtn {
+  background: linear-gradient(180deg, #e3bb59, #d09c36);
+  color: color-mix(in oklab, #d09c36 48%, black);
+}
+
+.editBtn {
+  background: linear-gradient(180deg, #5cc06d, #3da44f);
+  color: color-mix(in oklab, #3da44f 50%, black);
+}
+
+/* ── Post-read overlay — offered when you return from an article ── */
+.postReadCard {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent),
+    0 12px 32px var(--shadow);
+  z-index: 1;
+}
+
+.postReadOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 13px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  background: color-mix(in oklab,
+    color-mix(in oklab, var(--accent) 12%, var(--surface)) 86%, transparent);
+  backdrop-filter: blur(3px);
+  transform-origin: bottom center;
+  animation: postReadIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes postReadIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Liquid drain — the overlay pools toward the bottom of the card and empties */
+.postReadLeaving {
+  animation: postReadOut 0.45s cubic-bezier(0.55, 0, 0.7, 0.3) forwards;
+}
+
+@keyframes postReadOut {
+  0%   { transform: translateY(0) scaleY(1); opacity: 1; }
+  45%  { transform: translateY(28%) scaleY(0.72); opacity: 0.9; }
+  100% { transform: translateY(96%) scaleY(0.08); opacity: 0; }
+}
+
+.postReadTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.postReadBtns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.postReadBtns button {
+  min-width: 92px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.postReadBtns button:hover {
+  filter: saturate(1.15) brightness(1.06);
+}
+
+.postReadArchiveBtn {
+  background: linear-gradient(180deg, #e3bb59, #d09c36);
+  color: color-mix(in oklab, #d09c36 45%, black);
+}
+
+.postReadRemoveBtn {
+  background: linear-gradient(180deg, #e07a72, #cf5b52);
+  color: color-mix(in oklab, #cf5b52 48%, black);
 }
 
 .fetchingDot {
@@ -329,9 +430,66 @@
   50% { opacity: 1; transform: scale(1); }
 }
 
+/* Real grid (not column masonry) so removing a card shifts its neighbors
+   left — the direction the eye expects — instead of reflowing columns */
 .grid {
-  column-width: 200px;
-  column-gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+/* ── Magazine layout — editorial grid; saved articles have no artwork, so
+   features are big text cards and briefs run their notes in full ── */
+.gridMagazine {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-flow: dense;
+  gap: 12px;
+}
+
+.gridMagazine .card {
+  gap: 10px;
+  padding: 16px 18px 0;
+}
+
+.gridMagazine .title {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.gridMagazine .notes {
+  -webkit-line-clamp: 4;
+}
+
+/* Feature — spans two columns with headline-sized type */
+.featureWrap {
+  grid-column: span 2;
+}
+
+.featureWrap .title {
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.featureWrap .notes {
+  font-size: 13px;
+  -webkit-line-clamp: 6;
+}
+
+/* Brief — short notes run in full under an accent rule */
+.briefWrap {
+  border-top: 2px solid color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+.briefWrap .notes {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+/* A two-column feature can't fit once the grid drops to one column */
+@media (max-width: 600px) {
+  .featureWrap { grid-column: auto; }
 }
 
 /* ── List layout — single column of roomy rows, persistent inline actions ── */
@@ -342,10 +500,9 @@
 }
 
 .gridList .cardWrap {
-  margin-bottom: 0;
-  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
 }
 
 .gridList .card {
@@ -354,7 +511,7 @@
   flex-direction: row;
   align-items: center;
   gap: 14px;
-  padding: 16px 20px;
+  padding: 16px 0 16px 20px;
 }
 
 .gridList .tagRow,
@@ -374,48 +531,64 @@
   white-space: nowrap;
 }
 
-/* Actions leave the hover overlay and become part of the row */
-.gridList .cardActions {
-  position: static;
-  opacity: 1;
+/* In the list layout the footer flattens back into an inline row */
+.gridList .cardFooter {
+  flex-direction: row;
+  align-items: center;
   flex-shrink: 0;
-  gap: 6px;
+  margin-top: 0;
+  padding: 0 14px 0 0;
+  gap: 14px;
 }
 
-.gridList .actionBtn {
-  width: 32px;
-  height: 32px;
-}
-
-/* Lift the whole wrap (card + action buttons) together on hover */
+/* The wrap is the card surface — content link on top, footer row below,
+   so actions get real layout space instead of overlaying content */
 .cardWrap {
   position: relative;
-  break-inside: avoid;
-  margin-bottom: 12px;
-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s, border-color 0.15s;
 }
 
 .cardWrap:hover {
   transform: translateY(-3px);
+  box-shadow: 0 12px 28px var(--shadow);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
 }
 
 .card {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  padding: 16px 16px 0;
   text-decoration: none;
   cursor: pointer;
-  transition: box-shadow 0.2s, border-color 0.15s;
-  width: 100%;
 }
 
-.cardWrap:hover .card {
-  box-shadow: 0 12px 28px var(--shadow);
-  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+/* Cover image — bleeds to the card edges above the text */
+.hero {
+  width: calc(100% + 32px);
+  margin: -16px -16px 4px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 13px 13px 0 0;
+  background: var(--surface2);
+}
+
+.gridMagazine .hero {
+  width: calc(100% + 36px);
+  margin: -16px -18px 4px;
+}
+
+.featureWrap .hero {
+  aspect-ratio: 21 / 9;
+}
+
+.gridList .hero {
+  display: none;
 }
 
 
@@ -471,17 +644,30 @@
 .empty {
   color: var(--muted);
   font-size: 14px;
-  column-span: all;
+  grid-column: 1 / -1;
   padding: 16px 0;
 }
 
 @media (max-width: 460px) {
-  .grid { columns: 2; column-width: auto; }
+  .grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* Touch devices: hover never fires — keep actions visible and finger-sized.
-   Must stay at the end of the file to outrank the opacity: 0 base rule. */
+/* Touch devices: hover never fires — keep actions fully visible, and expand
+   each button's tap target to ~40px without growing its visual size.
+   Must stay at the end of the file to outrank the dimmed base rule. */
 @media (hover: none) {
-  .cardActions { opacity: 1; }
-  .actionBtn { width: 32px; height: 32px; }
+  .cardActions { opacity: 1; gap: 10px; }
+  .actionBtn { position: relative; }
+  .actionBtn::after {
+    content: '';
+    position: absolute;
+    inset: -9px;
+  }
+}
+
+/* Restore (unarchive) — sits in the yellow slot like archive; the lifted
+   arrow icon is what distinguishes it */
+.restoreBtn {
+  background: linear-gradient(180deg, #e3bb59, #d09c36);
+  color: color-mix(in oklab, #d09c36 48%, black);
 }

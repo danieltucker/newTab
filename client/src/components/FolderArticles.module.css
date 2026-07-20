@@ -86,15 +86,9 @@
 
 .gridList .cardWrap {
   margin-bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .gridList .card {
-  order: 1;
-  flex: 1;
-  min-width: 0;
   flex-direction: row;
   align-items: center;
   gap: 14px;
@@ -120,32 +114,35 @@
 
 .gridList .domain { max-width: 180px; }
 
-/* Actions leave the hover overlay and become part of the row */
 .gridList .cardActions {
-  order: 2;
-  position: static;
-  opacity: 1;
-  flex-shrink: 0;
   gap: 6px;
 }
 
-.gridList .actionBtn {
-  width: 32px;
-  height: 32px;
-}
-
-/* ── Magazine layout — wide masonry, cover images, roomier cards ── */
+/* ── Magazine layout — editorial grid: wide features, full-text briefs,
+   and a mix of image/text cards. Rows stay aligned; meta anchors to the
+   card bottom so stretched cards read as intentional. ── */
 .gridMagazine {
-  column-width: 300px;
-  column-gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-auto-flow: dense;
+  gap: 16px;
 }
 
-.gridMagazine .cardWrap { margin-bottom: 16px; }
+.gridMagazine .cardWrap {
+  margin-bottom: 0;
+  display: flex;
+}
 
 .gridMagazine .card {
+  flex: 1;
   gap: 10px;
   padding: 16px 18px;
   border-radius: 16px;
+}
+
+.gridMagazine .cardBottom {
+  margin-top: auto;
+  padding-top: 6px;
 }
 
 .gridMagazine .title {
@@ -157,6 +154,42 @@
 .gridMagazine .snippet {
   font-size: 13px;
   -webkit-line-clamp: 3;
+}
+
+/* Feature — long reads with artwork span two columns under a wide banner */
+.featureWrap {
+  grid-column: span 2;
+}
+
+.featureWrap .hero {
+  aspect-ratio: 21 / 9;
+}
+
+.featureWrap .title {
+  font-size: 21px;
+  line-height: 1.25;
+  -webkit-line-clamp: 3;
+}
+
+/* Text card — no artwork, so give the words more room */
+.textWrap .snippet {
+  -webkit-line-clamp: 6;
+}
+
+/* Brief — the snippet is the whole piece: run it in full under an accent rule */
+.briefWrap .card {
+  border-top: 2px solid color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+.briefWrap .snippet {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+/* A two-column feature can't fit once the grid drops to one column */
+@media (max-width: 600px) {
+  .featureWrap { grid-column: auto; }
 }
 
 /* Cover image — bleeds to the card edges above the text */
@@ -181,50 +214,56 @@
   transform: translateY(-3px);
 }
 
-/* ── Action buttons — top-right, visible on hover ── */
+/* ── Action buttons — traffic lights on their own line, bottom left ── */
 .cardActions {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   display: flex;
-  gap: 4px;
-  opacity: 0;
+  gap: 6px;
+  opacity: 0.75;
   transition: opacity 0.12s;
-  z-index: 2;
 }
 
-.cardWrap:hover .cardActions {
+.cardWrap:hover .cardActions,
+.cardWrap:focus-within .cardActions {
   opacity: 1;
 }
 
+/* Red / green with a subtle top-lit gradient. Glyphs are iOS-style
+   background-tinted: a dark mix of the button's own hue, so they read
+   as part of the light rather than grey overlays. */
 .actionBtn {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: none;
-  background: var(--surface2);
-  color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, color 0.12s;
+  transition: filter 0.12s;
 }
 
-.saveBtn:hover {
-  background: color-mix(in oklab, var(--accent) 15%, var(--surface2));
-  color: var(--accent);
+.actionBtn svg {
+  stroke-width: 2.2;
+}
+
+.actionBtn:hover {
+  filter: saturate(1.15) brightness(1.08);
+}
+
+.dismissBtn {
+  background: linear-gradient(180deg, #e07a72, #cf5b52);
+  color: color-mix(in oklab, #cf5b52 52%, black);
+}
+
+.saveBtn {
+  background: linear-gradient(180deg, #5cc06d, #3da44f);
+  color: color-mix(in oklab, #3da44f 50%, black);
 }
 
 .savedBtn {
-  color: #1DB954;
-  background: color-mix(in oklab, #1DB954 12%, var(--surface2));
+  background: linear-gradient(180deg, #5cc06d, #3da44f);
+  color: color-mix(in oklab, #3da44f 50%, black);
   cursor: default;
-}
-
-.dismissBtn:hover {
-  background: color-mix(in oklab, #FF4500 15%, var(--surface2));
-  color: #FF4500;
 }
 
 /* ── Card ── */
@@ -331,7 +370,7 @@
 .cardRight {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -399,9 +438,20 @@
   .grid { columns: 2; column-width: auto; }
 }
 
-/* Touch devices: hover never fires — keep actions visible and finger-sized.
-   Must stay at the end of the file to outrank the opacity: 0 base rule. */
+/* Touch devices: hover never fires — keep actions fully visible, and expand
+   each button's tap target to ~40px without growing its visual size.
+   Must stay after the dimmed base rule to outrank it. */
 @media (hover: none) {
-  .cardActions { opacity: 1; }
-  .actionBtn { width: 32px; height: 32px; }
+  .cardActions { opacity: 1; gap: 10px; }
+  .actionBtn { position: relative; }
+  .actionBtn::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+/* Filter dropdowns themselves live in FilterDropdown.module.css */
+.sourceFilter {
+  margin-left: auto;
 }

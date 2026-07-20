@@ -146,6 +146,17 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
   res.json({ ok: true });
 });
 
+// Clears the unread badges on every bookmark in the folder
+router.post('/:id/mark-read', async (req: AuthRequest, res: Response): Promise<void> => {
+  const folder = await prisma.folder.findFirst({ where: { id: req.params.id, userId: req.userId! } });
+  if (!folder) { res.status(404).json({ error: 'Not found' }); return; }
+  await prisma.bookmark.updateMany({
+    where: { folderId: req.params.id, userId: req.userId! },
+    data: { unreadCount: 0 },
+  });
+  res.json({ ok: true });
+});
+
 router.post('/refresh-all', async (req: AuthRequest, res: Response): Promise<void> => {
   const folders = await prisma.folder.findMany({
     where: { userId: req.userId!, NOT: { feedUrls: { isEmpty: true } } },

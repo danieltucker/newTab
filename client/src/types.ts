@@ -44,6 +44,7 @@ export interface ReadingListItem {
   readTime: string;
   tag: string;
   notes: string;
+  imageUrl: string;
   archived: boolean;
   savedAt: string;
 }

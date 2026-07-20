@@ -137,3 +137,61 @@
   border-color: color-mix(in oklab, var(--accent) 30%, transparent);
   color: var(--accent);
 }
+
+/* ── Rotating placeholder hint ── */
+.inputWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.inputWrap .input {
+  width: 100%;
+}
+
+.hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  perspective: 500px;
+}
+
+.charIn,
+.charOut {
+  display: inline-block;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.charIn {
+  animation: hintFlipIn 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.charOut {
+  animation: hintFlipOut 0.3s cubic-bezier(0.5, 0, 0.8, 0.4) both;
+}
+
+@keyframes hintFlipIn {
+  from { opacity: 0; transform: rotateX(-90deg) translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes hintFlipOut {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: rotateX(90deg) translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .charIn, .charOut { animation-duration: 0.01s; }
+}
+
+.tagHit {
+  color: var(--accent);
+}

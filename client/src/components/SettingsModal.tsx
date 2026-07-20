@@ -1,16 +1,50 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import styles from './SettingsModal.module.css';
 import { UserSettings } from '../hooks/useSettings';
-import { apiFetch } from '../services/api';
+import { apiFetch, apiGet, apiPatch } from '../services/api';
+
+export interface UserProfile {
+  username: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  avatar: string | null;
+}
 
 interface Props {
   settings: UserSettings;
   onUpdate: (patch: Partial<UserSettings>) => Promise<void>;
   onClose: () => void;
   onImport?: () => void;
+  initialSection?: Section;
+  onProfileChange?: (profile: UserProfile) => void;
 }
 
-type Section = 'search' | 'appearance' | 'reading' | 'security' | 'advanced' | 'integrations';
+export type Section = 'account' | 'search' | 'appearance' | 'reading' | 'advanced' | 'integrations';
+
+// Downscale the chosen image to a small square data URL client-side —
+// keeps uploads tiny and avoids any server-side image processing.
+const AVATAR_SIZE = 128;
+function fileToAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = AVATAR_SIZE;
+      canvas.height = AVATAR_SIZE;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('canvas unavailable')); return; }
+      // cover-crop to a square from the centre
+      const side = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('could not read image')); };
+    img.src = url;
+  });
+}
 
 const ENGINES = [
   { id: 'google',     label: 'Google',     url: 'google.com' },
@@ -28,10 +62,10 @@ const BookOpenIcon = () => (
 );
 
 const NAV: { id: Section; label: string; icon: ReactNode }[] = [
+  { id: 'account',      label: 'Account',      icon: '◍' },
   { id: 'search',       label: 'Search',       icon: '⌕' },
   { id: 'appearance',   label: 'Appearance',   icon: '◑' },
   { id: 'reading',      label: 'Reading',      icon: <BookOpenIcon /> },
-  { id: 'security',     label: 'Security',     icon: '⚿' },
   { id: 'advanced',     label: 'Advanced',     icon: '⚙' },
   { id: 'integrations', label: 'Integrations', icon: '⇌' },
 ];
@@ -67,8 +101,125 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-export default function SettingsModal({ settings, onUpdate, onClose, onImport }: Props) {
-  const [section, setSection] = useState<Section>('search');
+export default function SettingsModal({ settings, onUpdate, onClose, onImport, initialSection, onProfileChange }: Props) {
+  const [section, setSection] = useState<Section>(initialSection ?? 'search');
+
+  // ── Profile state ─────────────────────────────────────────────────────────────
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (section !== 'account' || profile) return;
+    apiGet<UserProfile>('/api/v1/account').then(p => {
+      setProfile(p);
+      setFirstName(p.firstName ?? '');
+      setLastName(p.lastName ?? '');
+      setEmail(p.email ?? '');
+    }).catch(() => setProfileError('Could not load profile'));
+  }, [section, profile]);
+
+  async function saveNames() {
+    setProfileSaving(true); setProfileError(''); setProfileSaved(false);
+    try {
+      const p = await apiPatch<UserProfile>('/api/v1/account', {
+        firstName: firstName.trim() || null,
+        lastName: lastName.trim() || null,
+        email: email.trim() || null,
+      });
+      setProfile(p);
+      onProfileChange?.(p);
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 2500);
+    } catch (e) {
+      // apiPatch throws with the raw response body — surface the server's message
+      let msg = 'Could not save profile';
+      if (e instanceof Error) { try { msg = JSON.parse(e.message).error ?? msg; } catch {} }
+      setProfileError(msg);
+    }
+    finally { setProfileSaving(false); }
+  }
+
+  // ── First-admin claim (only offered while the instance has no admins) ────────
+  const [adminClaimable, setAdminClaimable] = useState(false);
+  const [claimToken, setClaimToken] = useState('');
+  const [claimError, setClaimError] = useState('');
+  const [claimBusy, setClaimBusy] = useState(false);
+
+  useEffect(() => {
+    if (section !== 'account') return;
+    apiGet<{ claimable: boolean }>('/api/v1/account/admin-claim')
+      .then(d => setAdminClaimable(d.claimable))
+      .catch(() => {});
+  }, [section]);
+
+  async function claimAdmin() {
+    setClaimBusy(true); setClaimError('');
+    try {
+      const r = await apiFetch('/api/v1/account/admin-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: claimToken.trim() }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+      // Reload so the refreshed session carries the admin flag (shield button appears)
+      window.location.reload();
+    } catch (e) {
+      setClaimError(e instanceof Error ? e.message : 'Could not claim admin');
+      setClaimBusy(false);
+    }
+  }
+
+  async function handleAvatarFile(file: File | undefined) {
+    if (!file) return;
+    setProfileError('');
+    try {
+      const avatar = await fileToAvatar(file);
+      const p = await apiPatch<UserProfile>('/api/v1/account', { avatar });
+      setProfile(p);
+      onProfileChange?.(p);
+    } catch { setProfileError('Could not update image'); }
+  }
+
+  async function removeAvatar() {
+    setProfileError('');
+    try {
+      const p = await apiPatch<UserProfile>('/api/v1/account', { avatar: null });
+      setProfile(p);
+      onProfileChange?.(p);
+    } catch { setProfileError('Could not remove image'); }
+  }
+
+  // ── Password state ────────────────────────────────────────────────────────────
+  const [curPw, setCurPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+
+  async function changePassword() {
+    setPwError(''); setPwSuccess(false);
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return; }
+    if (newPw !== confirmPw) { setPwError('Passwords do not match'); return; }
+    setPwSaving(true);
+    try {
+      const r = await apiFetch('/api/v1/account/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: curPw, newPassword: newPw }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+      setPwSuccess(true);
+      setCurPw(''); setNewPw(''); setConfirmPw('');
+    } catch (e) { setPwError(e instanceof Error ? e.message : 'Could not change password'); }
+    finally { setPwSaving(false); }
+  }
 
   // ── TOTP state ────────────────────────────────────────────────────────────────
   const [totpEnabled, setTotpEnabled] = useState(false);
@@ -79,7 +230,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
   const [totpLoading, setTotpLoading] = useState(false);
 
   useEffect(() => {
-    if (section !== 'security') return;
+    if (section !== 'account') return;
     apiFetch('/api/v1/totp/status').then(r => r.json()).then(d => setTotpEnabled(d.enabled));
   }, [section]);
 
@@ -275,6 +426,49 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
             {section === 'reading' && (
               <>
                 <div className={styles.sectionBlock}>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>RSS feeds</div>
+                      <div className={styles.rowHint}>
+                        Show feed articles in folders and auto-detect feeds when you add a bookmark.
+                        Turning this off hides all feed content.
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={settings.rssEnabled !== false}
+                      onChange={v => onUpdate({ rssEnabled: v })}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Saving articles</div>
+                  <div className={styles.openModeList}>
+                    {([
+                      { value: 'dialog',  label: 'Review before saving', hint: 'Opens a dialog to edit the title, tags, and read time first' },
+                      { value: 'instant', label: 'Save instantly',       hint: 'Saves with the article’s own title and tags — you can edit later from the card' },
+                    ] as const).map(opt => {
+                      const active = (settings.saveArticleMode ?? 'dialog') === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          className={`${styles.openModeOption} ${active ? styles.openModeSelected : ''}`}
+                          onClick={() => onUpdate({ saveArticleMode: opt.value })}
+                        >
+                          <div className={styles.openModeRadio}>
+                            <span className={active ? styles.radioFilled : styles.radioEmpty} />
+                          </div>
+                          <div>
+                            <div className={styles.openModeLabel}>{opt.label}</div>
+                            <div className={styles.rowHint}>{opt.hint}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
                   <div className={styles.blockTitle}>Reading list</div>
                   <div className={styles.openModeList}>
                     {([
@@ -350,7 +544,105 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
               </>
             )}
 
-            {section === 'security' && (
+            {section === 'account' && (
+              <>
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Profile</div>
+
+                  <div className={styles.avatarRow}>
+                    {profile?.avatar
+                      ? <img src={profile.avatar} alt="" className={styles.avatarPreview} />
+                      : <div className={styles.avatarFallback}>{(profile?.username ?? '?').charAt(0).toUpperCase()}</div>}
+                    <div className={styles.avatarActions}>
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        style={{ display: 'none' }}
+                        onChange={e => { handleAvatarFile(e.target.files?.[0]); e.target.value = ''; }}
+                      />
+                      <button className={styles.enableBtn} onClick={() => avatarInputRef.current?.click()}>
+                        {profile?.avatar ? 'Change image' : 'Upload image'}
+                      </button>
+                      {profile?.avatar && (
+                        <button className={styles.cancelBtn} onClick={removeAvatar}>Remove</button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={styles.nameGrid}>
+                    <div>
+                      <div className={styles.fieldLabel}>First name</div>
+                      <input className={styles.textInput} type="text" value={firstName} maxLength={100}
+                        onChange={e => setFirstName(e.target.value)} placeholder="First name" />
+                    </div>
+                    <div>
+                      <div className={styles.fieldLabel}>Last name</div>
+                      <input className={styles.textInput} type="text" value={lastName} maxLength={100}
+                        onChange={e => setLastName(e.target.value)} placeholder="Last name" />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <div className={styles.fieldLabel}>Email</div>
+                    <input className={styles.textInput} type="email" value={email} maxLength={254}
+                      onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
+                  </div>
+                  <div className={styles.saveRow}>
+                    {profileSaved && <span className={styles.successMsg}>Saved</span>}
+                    <button className={styles.enableBtn} onClick={saveNames} disabled={profileSaving}>
+                      {profileSaving ? 'Saving…' : 'Save profile'}
+                    </button>
+                  </div>
+                  {profileError && <div className={styles.totpError}>{profileError}</div>}
+                </div>
+
+                <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Change password</div>
+                  <div className={styles.pwForm}>
+                    <input className={styles.textInput} type="password" autoComplete="current-password"
+                      placeholder="Current password" value={curPw} onChange={e => setCurPw(e.target.value)} />
+                    <input className={styles.textInput} type="password" autoComplete="new-password"
+                      placeholder="New password (min. 8 characters)" value={newPw} onChange={e => setNewPw(e.target.value)} />
+                    <input className={styles.textInput} type="password" autoComplete="new-password"
+                      placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
+                  </div>
+                  <div className={styles.saveRow}>
+                    {pwSuccess && <span className={styles.successMsg}>Password updated — other devices were signed out</span>}
+                    <button
+                      className={styles.enableBtn}
+                      onClick={changePassword}
+                      disabled={pwSaving || !curPw || !newPw || !confirmPw}
+                    >
+                      {pwSaving ? 'Updating…' : 'Update password'}
+                    </button>
+                  </div>
+                  {pwError && <div className={styles.totpError}>{pwError}</div>}
+                </div>
+
+                {adminClaimable && (
+                  <div className={styles.sectionBlock}>
+                    <div className={styles.blockTitle}>Admin setup</div>
+                    <div className={styles.rowHint} style={{ marginBottom: 10 }}>
+                      This instance has no administrator yet. Enter the setup token from your
+                      server configuration (ADMIN_SETUP_TOKEN) to become the first admin.
+                    </div>
+                    <div className={styles.totpRow}>
+                      <input
+                        className={styles.textInput}
+                        type="password"
+                        placeholder="Setup token"
+                        value={claimToken}
+                        onChange={e => { setClaimToken(e.target.value); setClaimError(''); }}
+                        style={{ maxWidth: 280 }}
+                      />
+                      <button className={styles.enableBtn} onClick={claimAdmin} disabled={claimBusy || !claimToken.trim()}>
+                        {claimBusy ? 'Claiming…' : 'Claim admin'}
+                      </button>
+                    </div>
+                    {claimError && <div className={styles.totpError}>{claimError}</div>}
+                  </div>
+                )}
+
               <div className={styles.sectionBlock}>
                 <div className={styles.blockTitle}>Two-factor authentication</div>
 
@@ -422,6 +714,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport }:
                   </div>
                 )}
               </div>
+              </>
             )}
 
             {section === 'advanced' && (

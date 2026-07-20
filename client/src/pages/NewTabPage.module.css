@@ -6,9 +6,10 @@
 }
 
 .content {
+  position: relative;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 32px 64px;
+  padding: 28px 32px 64px;
 }
 
 .header {
@@ -16,6 +17,12 @@
 }
 
 .searchbar {
+  /* Follows you down the page; content scrolls beneath it,
+     modals (--z-modal and up) cover it. top matches the console
+     overlay's 15px padding so both rest at the same height. */
+  position: sticky;
+  top: 15px;
+  z-index: var(--z-sticky);
   animation: rise 0.48s 0.06s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
@@ -39,21 +46,67 @@
   margin-top: 26px;
 }
 
+/* Floats on the same row as the newt logo (34px tall, starting at the
+   content's 28px top padding) — buttons are 30px, so top centres them */
 .topBar {
+  position: absolute;
+  top: 30px;
+  right: 32px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 4px;
-  margin-bottom: 6px;
+}
+
+.userBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px 3px 4px;
+  margin-right: 4px;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.userBtn:hover {
+  background: var(--surface2);
+}
+
+.userBtn:hover .username {
+  opacity: 1;
+  color: var(--text);
+}
+
+.userAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.userAvatarFallback {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface2));
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .username {
   font-size: 12px;
+  font-family: 'Hanken Grotesk', sans-serif;
   color: var(--muted);
-  opacity: 0.5;
-  margin-right: 4px;
-  pointer-events: none;
+  opacity: 0.6;
   user-select: none;
+  transition: opacity 0.15s, color 0.15s;
 }
 
 .iconBtn {
@@ -170,6 +223,11 @@
 @media (max-width: 900px) {
   .content {
     padding: 24px 16px 48px;
+  }
+
+  .topBar {
+    top: 26px;
+    right: 16px;
   }
 
   .bodyGrid {

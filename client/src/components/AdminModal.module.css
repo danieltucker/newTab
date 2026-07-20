@@ -1,0 +1,465 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  animation: fade 0.15s ease;
+}
+
+.panel {
+  display: flex;
+  width: min(1100px, 96vw);
+  height: min(640px, 90vh);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  animation: rise 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ── Left nav ── */
+.nav {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 24px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navHeader {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 10px;
+  margin-bottom: 10px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.navItem:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.navActive {
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface2));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Content ── */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.contentHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 14px;
+}
+
+.title {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.closeBtn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.closeBtn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 4px 24px 24px;
+}
+
+.error {
+  margin: 0 24px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 69, 0, 0.08);
+  color: #FF4500;
+  font-size: 13px;
+}
+
+/* ── Stat cards ── */
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+
+.statValue {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+/* ── Chart ── */
+.chartBlock {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+
+.chartTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.chartTotal {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: 140px;
+}
+
+.bar {
+  fill: var(--accent);
+  opacity: 0.85;
+}
+
+.barEmpty {
+  fill: var(--border);
+}
+
+.axisLabel {
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 9px;
+  fill: var(--muted);
+  opacity: 0.7;
+}
+
+/* ── Users table ── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.table tbody tr:hover td {
+  background: var(--surface2);
+}
+
+.userCell {
+  color: var(--text) !important;
+  font-weight: 500;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.youBadge {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+
+.badgeOn,
+.badgeOff {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+.badgeOn {
+  color: #1DB954;
+  background: color-mix(in oklab, #1DB954 12%, transparent);
+}
+
+.badgeOff {
+  color: var(--muted);
+  background: var(--surface2);
+  opacity: 0.7;
+}
+
+.adminToggle {
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.adminToggle:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.adminOn {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.adminToggle:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── Line chart ── */
+.line {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.lineDot {
+  fill: var(--accent);
+}
+
+.areaTop {
+  stop-color: var(--accent);
+  stop-opacity: 0.22;
+}
+
+.areaBottom {
+  stop-color: var(--accent);
+  stop-opacity: 0;
+}
+
+.trendBadge {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trendUp {
+  color: #1DB954;
+  background: color-mix(in oklab, #1DB954 12%, transparent);
+}
+
+.trendDown {
+  color: #FF4500;
+  background: color-mix(in oklab, #FF4500 12%, transparent);
+}
+
+.trendFlat {
+  color: var(--muted);
+  background: var(--surface2);
+}
+
+/* ── Users tab: search, ban, delete ── */
+.searchInput {
+  width: 100%;
+  max-width: 340px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
+.searchInput::placeholder {
+  color: var(--muted);
+}
+
+.emailCell {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actionCell {
+  display: flex;
+  gap: 6px;
+}
+
+.bannedRow td {
+  opacity: 0.55;
+}
+
+.bannedBadge {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #FF4500;
+  background: color-mix(in oklab, #FF4500 12%, transparent);
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+
+.banBtn:hover:not(:disabled) {
+  border-color: #FF4500;
+  color: #FF4500;
+}
+
+.unbanBtn {
+  background: color-mix(in oklab, #FF4500 12%, transparent);
+  border-color: color-mix(in oklab, #FF4500 40%, transparent);
+  color: #FF4500;
+}
+
+.deleteConfirmBtn {
+  background: #FF4500;
+  border-color: #FF4500;
+  color: #fff;
+}
+
+.deleteConfirmBtn:hover:not(:disabled) {
+  border-color: #FF4500;
+  color: #fff;
+  filter: brightness(1.1);
+}
+
+.emptyResult {
+  padding: 24px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Click-to-copy cells ── */
+.copyable {
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+
+.copyable:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-style: dotted;
+}
+
+.copiedChip {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #1DB954;
+  background: color-mix(in oklab, #1DB954 12%, transparent);
+  border-radius: 20px;
+  padding: 1px 8px;
+  animation: fade 0.15s ease;
+}

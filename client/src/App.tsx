@@ -19,7 +19,7 @@ function getInitialSetting(): ThemeSetting {
 }
 
 export default function App() {
-  const { accessToken, username, loading, login, register, logout, verifyTotp } = useAuth();
+  const { accessToken, username, isAdmin, loading, login, register, logout, verifyTotp } = useAuth();
   const [themeSetting, setThemeSetting] = useState<ThemeSetting>(getInitialSetting);
 
   useEffect(() => {
@@ -47,6 +47,7 @@ export default function App() {
     <NewTabPage
       accessToken={accessToken}
       username={username}
+      isAdmin={isAdmin}
       themeSetting={themeSetting}
       resolvedTheme={resolveTheme(themeSetting)}
       onSetTheme={setThemeSetting}

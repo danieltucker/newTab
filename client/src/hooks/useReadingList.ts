@@ -24,15 +24,26 @@ export function useReadingList(accessToken: string | null) {
     setItems(prev => prev.map(i => i.id === id ? updated : i));
   }, []);
 
+  // Archive/remove update state first (so the UI can animate the change
+  // synchronously) and reconcile with the server behind the scenes
   const archiveItem = useCallback(async (id: string, archived: boolean) => {
-    const updated = await apiPatch<ReadingListItem>(`/api/v1/reading-list/${id}`, { archived });
-    setItems(prev => prev.map(i => i.id === id ? updated : i));
-  }, []);
+    setItems(prev => prev.map(i => i.id === id ? { ...i, archived } : i));
+    try {
+      const updated = await apiPatch<ReadingListItem>(`/api/v1/reading-list/${id}`, { archived });
+      setItems(prev => prev.map(i => i.id === id ? updated : i));
+    } catch {
+      load();
+    }
+  }, [load]);
 
   const removeItem = useCallback(async (id: string) => {
-    await apiDelete(`/api/v1/reading-list/${id}`);
     setItems(prev => prev.filter(i => i.id !== id));
-  }, []);
+    try {
+      await apiDelete(`/api/v1/reading-list/${id}`);
+    } catch {
+      load();
+    }
+  }, [load]);
 
   return { items, saveItem, updateItem, archiveItem, removeItem };
 }

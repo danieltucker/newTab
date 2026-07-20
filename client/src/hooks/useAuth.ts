@@ -4,11 +4,12 @@ import { setAccessToken, apiFetch } from '../services/api';
 interface AuthState {
   accessToken: string | null;
   username: string | null;
+  isAdmin: boolean;
   loading: boolean;
 }
 
 export function useAuth() {
-  const [state, setState] = useState<AuthState>({ accessToken: null, username: null, loading: true });
+  const [state, setState] = useState<AuthState>({ accessToken: null, username: null, isAdmin: false, loading: true });
   const refreshAttempted = useRef(false);
 
   // Restore session on mount. Guard ref prevents the double-invoke in React Strict Mode
@@ -21,12 +22,12 @@ export function useAuth() {
       .then(data => {
         if (data?.accessToken) {
           setAccessToken(data.accessToken);
-          setState({ accessToken: data.accessToken, username: data.username, loading: false });
+          setState({ accessToken: data.accessToken, username: data.username, isAdmin: !!data.isAdmin, loading: false });
         } else {
-          setState({ accessToken: null, username: null, loading: false });
+          setState({ accessToken: null, username: null, isAdmin: false, loading: false });
         }
       })
-      .catch(() => setState({ accessToken: null, username: null, loading: false }));
+      .catch(() => setState({ accessToken: null, username: null, isAdmin: false, loading: false }));
   }, []);
 
   const login = useCallback(async (username: string, password: string): Promise<{ requiresTotp: true; totpToken: string; username: string } | void> => {
@@ -45,7 +46,7 @@ export function useAuth() {
       return { requiresTotp: true, totpToken: data.totpToken, username: data.username };
     }
     setAccessToken(data.accessToken);
-    setState({ accessToken: data.accessToken, username: data.username, loading: false });
+    setState({ accessToken: data.accessToken, username: data.username, isAdmin: !!data.isAdmin, loading: false });
   }, []);
 
   const verifyTotp = useCallback(async (totpToken: string, code: string) => {
@@ -61,7 +62,7 @@ export function useAuth() {
     }
     const data = await res.json();
     setAccessToken(data.accessToken);
-    setState({ accessToken: data.accessToken, username: data.username, loading: false });
+    setState({ accessToken: data.accessToken, username: data.username, isAdmin: !!data.isAdmin, loading: false });
   }, []);
 
   const register = useCallback(async (username: string, password: string) => {
@@ -77,13 +78,13 @@ export function useAuth() {
     }
     const data = await res.json();
     setAccessToken(data.accessToken);
-    setState({ accessToken: data.accessToken, username: data.username, loading: false });
+    setState({ accessToken: data.accessToken, username: data.username, isAdmin: !!data.isAdmin, loading: false });
   }, []);
 
   const logout = useCallback(async () => {
     await apiFetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => {});
     setAccessToken(null);
-    setState({ accessToken: null, username: null, loading: false });
+    setState({ accessToken: null, username: null, isAdmin: false, loading: false });
   }, []);
 
   return { ...state, login, register, logout, verifyTotp };

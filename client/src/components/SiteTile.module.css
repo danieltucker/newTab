@@ -135,7 +135,7 @@
   box-shadow: 0 8px 24px var(--shadow);
   min-width: 100px;
   overflow: hidden;
-  z-index: 50;
+  z-index: var(--z-content-overlay);
   animation: pop 0.15s ease;
 }
 

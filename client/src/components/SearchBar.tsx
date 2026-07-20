@@ -1,6 +1,17 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './SearchBar.module.css';
 import { faviconUrl } from '../utils/color';
+
+// Rotating placeholder hints — cycled with a per-letter flip animation
+const HINTS = [
+  'Search the web or enter an address',
+  'Ask Claude anything with /c your question',
+  'Search your bookmarks, feeds and reading list — try #tag',
+  '/g Google · /d DuckDuckGo · /b Bing · /br Brave',
+  'Paste a URL to go straight there',
+];
+const HINT_INTERVAL_MS = 6000;
+const HINT_FLIP_MS = 340;
 
 const SEARCH_URLS: Record<string, (q: string) => string> = {
   google:     q => `https://www.google.com/search?q=${q}`,
@@ -9,14 +20,14 @@ const SEARCH_URLS: Record<string, (q: string) => string> = {
   brave:      q => `https://search.brave.com/search?q=${q}`,
 };
 
-// Slash shortcuts: /g → Google, /d → DuckDuckGo, /b → Bing, /br → Brave, /a → Claude
+// Slash shortcuts: /g → Google, /d → DuckDuckGo, /b → Bing, /br → Brave, /c → Claude
 // Longer prefixes listed first so /br is matched before /b
 const SHORTCUTS = [
-  { prefix: '/br', engine: 'Brave',      url: (q: string) => `https://search.brave.com/search?q=${encodeURIComponent(q)}` },
-  { prefix: '/g',  engine: 'Google',     url: (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}` },
-  { prefix: '/d',  engine: 'DuckDuckGo', url: (q: string) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}` },
-  { prefix: '/b',  engine: 'Bing',       url: (q: string) => `https://www.bing.com/search?q=${encodeURIComponent(q)}` },
-  { prefix: '/c',  engine: 'Claude',     url: (q: string) => `https://claude.ai/new?q=${encodeURIComponent(q)}` },
+  { prefix: '/br', engine: 'Brave',      verb: 'Search', url: (q: string) => `https://search.brave.com/search?q=${encodeURIComponent(q)}` },
+  { prefix: '/g',  engine: 'Google',     verb: 'Search', url: (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}` },
+  { prefix: '/d',  engine: 'DuckDuckGo', verb: 'Search', url: (q: string) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}` },
+  { prefix: '/b',  engine: 'Bing',       verb: 'Search', url: (q: string) => `https://www.bing.com/search?q=${encodeURIComponent(q)}` },
+  { prefix: '/c',  engine: 'Claude',     verb: 'Ask',    url: (q: string) => `https://claude.ai/new?q=${encodeURIComponent(q)}` },
 ];
 
 function isUrl(s: string): boolean {
@@ -37,14 +48,22 @@ interface ArticleHint {
   url: string;
   title: string;
   source: string;
+  tag?: string;          // reading list: comma-separated tags
+  categories?: string[]; // feed articles
+}
+
+// All tag-like labels on an item, normalised
+function tagsOf(a: ArticleHint): string[] {
+  const fromTag = a.tag ? a.tag.split(',').map(t => t.trim()).filter(Boolean) : [];
+  return [...fromTag, ...(a.categories ?? [])];
 }
 
 type Suggestion =
   | { kind: 'bookmark'; id: string; name: string; domain: string }
-  | { kind: 'article';  id: string; title: string; source: string; url: string }
+  | { kind: 'article';  id: string; title: string; source: string; url: string; matchedTag?: string }
   | { kind: 'search';   text: string; url: string }
   | { kind: 'url';      text: string; url: string }
-  | { kind: 'shortcut'; text: string; url: string; engine: string };
+  | { kind: 'shortcut'; text: string; url: string; engine: string; verb: string };
 
 interface Props {
   searchEngine?: string;
@@ -66,34 +85,67 @@ export default function SearchBar({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Rotating hint: flip the current one out, swap text, flip the next one in
+  const [hintIdx, setHintIdx] = useState(0);
+  const [hintPhase, setHintPhase] = useState<'in' | 'out'>('in');
+  useEffect(() => {
+    if (value) return; // pause rotation while the user is typing
+    const interval = setInterval(() => {
+      setHintPhase('out');
+      setTimeout(() => {
+        setHintIdx(i => (i + 1) % HINTS.length);
+        setHintPhase('in');
+      }, HINT_FLIP_MS);
+    }, HINT_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [value]);
+
   const suggestions = useMemo<Suggestion[]>(() => {
     const raw = value.trim();
     if (!raw) return [];
 
-    // Check for slash shortcut: /g query, /a query, etc.
-    const shortcut = SHORTCUTS.find(s => raw.startsWith(s.prefix + ' '));
+    // Slash shortcut: recognized the moment the bare prefix is typed ("/c"),
+    // then again with the query as it's entered ("/c how do…")
+    const shortcut = SHORTCUTS.find(s => raw === s.prefix || raw.startsWith(s.prefix + ' '));
     if (shortcut) {
       const query = raw.slice(shortcut.prefix.length).trim();
-      if (query) return [{ kind: 'shortcut', text: query, url: shortcut.url(query), engine: shortcut.engine }];
+      return [{
+        kind: 'shortcut',
+        text: query,
+        url: query ? shortcut.url(query) : '',
+        engine: shortcut.engine,
+        verb: shortcut.verb,
+      }];
     }
 
-    const q = raw.toLowerCase();
+    // "#query" searches tags only; otherwise tags match alongside title/source
+    const tagOnly = raw.startsWith('#');
+    const q = (tagOnly ? raw.slice(1) : raw).toLowerCase().trim();
     const results: Suggestion[] = [];
+    if (!q) return results;
 
-    bookmarks
-      .filter(b => b.name.toLowerCase().includes(q) || b.domain.toLowerCase().includes(q))
-      .slice(0, 5)
-      .forEach(b => results.push({ kind: 'bookmark', id: b.id, name: b.name, domain: b.domain }));
+    const matchTag = (a: ArticleHint) => tagsOf(a).find(t => t.toLowerCase().includes(q));
+    const matchText = (a: ArticleHint) =>
+      !tagOnly && (a.title.toLowerCase().includes(q) || a.source.toLowerCase().includes(q));
+
+    if (!tagOnly) {
+      bookmarks
+        .filter(b => b.name.toLowerCase().includes(q) || b.domain.toLowerCase().includes(q))
+        .slice(0, 5)
+        .forEach(b => results.push({ kind: 'bookmark', id: b.id, name: b.name, domain: b.domain }));
+    }
 
     readingItems
-      .filter(a => a.title.toLowerCase().includes(q) || a.source.toLowerCase().includes(q))
-      .slice(0, 3)
-      .forEach(a => results.push({ kind: 'article', id: a.id, title: a.title, source: a.source, url: a.url }));
+      .filter(a => matchText(a) || matchTag(a))
+      .slice(0, tagOnly ? 6 : 3)
+      .forEach(a => results.push({ kind: 'article', id: a.id, title: a.title, source: a.source, url: a.url, matchedTag: matchTag(a) }));
 
     feedArticles
-      .filter(a => a.title.toLowerCase().includes(q) || a.source.toLowerCase().includes(q))
-      .slice(0, 4)
-      .forEach(a => results.push({ kind: 'article', id: `feed-${a.id}`, title: a.title, source: a.source, url: a.url }));
+      .filter(a => matchText(a) || matchTag(a))
+      .slice(0, tagOnly ? 6 : 4)
+      .forEach(a => results.push({ kind: 'article', id: `feed-${a.id}`, title: a.title, source: a.source, url: a.url, matchedTag: matchTag(a) }));
+
+    if (tagOnly) return results;
 
     if (isUrl(raw)) {
       results.push({ kind: 'url', text: raw, url: raw.startsWith('http') ? raw : `https://${raw}` });
@@ -119,9 +171,10 @@ export default function SearchBar({
   function pick(item: Suggestion) {
     if (item.kind === 'bookmark') {
       navigate(`https://${item.domain}`);
-    } else {
+    } else if (item.url) {
       navigate(item.url);
     }
+    // Bare shortcut prefix (no query yet) — nothing to open
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -133,9 +186,12 @@ export default function SearchBar({
     const q = value.trim();
     if (!q) return;
     // Check slash shortcuts on submit too (e.g. Enter pressed without selecting a suggestion)
+    if (SHORTCUTS.some(s => q === s.prefix)) return; // bare prefix — wait for a query
     const shortcut = SHORTCUTS.find(s => q.startsWith(s.prefix + ' '));
     if (shortcut) {
-      navigate(shortcut.url(q.slice(shortcut.prefix.length).trim()));
+      const query = q.slice(shortcut.prefix.length).trim();
+      if (!query) return;
+      navigate(shortcut.url(query));
       return;
     }
     const url = isUrl(q)
@@ -193,16 +249,31 @@ export default function SearchBar({
         <svg className={styles.icon} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <input
-          className={styles.input}
-          type="text"
-          placeholder="Search the web or enter an address"
-          value={value}
-          onChange={e => { setValue(e.target.value); setOpen(true); setSelectedIndex(-1); }}
-          onKeyDown={handleKeyDown}
-          onFocus={() => { if (value.trim()) setOpen(true); }}
-          onBlur={handleBlur}
-        />
+        <div className={styles.inputWrap}>
+          <input
+            className={styles.input}
+            type="text"
+            value={value}
+            onChange={e => { setValue(e.target.value); setOpen(true); setSelectedIndex(-1); }}
+            onKeyDown={handleKeyDown}
+            onFocus={() => { if (value.trim()) setOpen(true); }}
+            onBlur={handleBlur}
+            aria-label="Search the web or enter an address"
+          />
+          {!value && (
+            <span className={styles.hint} aria-hidden="true">
+              {HINTS[hintIdx].split('').map((ch, i) => (
+                <span
+                  key={`${hintIdx}-${i}`}
+                  className={hintPhase === 'in' ? styles.charIn : styles.charOut}
+                  style={{ animationDelay: `${i * 9}ms` }}
+                >
+                  {ch === ' ' ? ' ' : ch}
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
       </form>
 
       {open && suggestions.length > 0 && (
@@ -226,7 +297,10 @@ export default function SearchBar({
                 <div className={styles.resultIconWrap}><IconDoc /></div>
                 <div className={styles.resultText}>
                   <span className={styles.resultLabel}>{item.title}</span>
-                  <span className={styles.resultSub}>{item.source}</span>
+                  <span className={styles.resultSub}>
+                    {item.source}
+                    {item.matchedTag && <span className={styles.tagHit}> · #{item.matchedTag}</span>}
+                  </span>
                 </div>
                 <span className={styles.badge}>Article</span>
               </div>
@@ -245,7 +319,18 @@ export default function SearchBar({
                 onMouseDown={() => handleMouseDown(item)} onMouseEnter={() => setSelectedIndex(i)}>
                 <div className={styles.resultIconWrap}><IconSearch /></div>
                 <div className={styles.resultText}>
-                  <span className={styles.resultLabel}>Search <strong>{item.engine}</strong> for <strong>{item.text}</strong></span>
+                  <span className={styles.resultLabel}>
+                    {item.text
+                      ? (item.verb === 'Ask'
+                          ? <>Ask <strong>{item.engine}</strong>: <strong>{item.text}</strong></>
+                          : <>Search <strong>{item.engine}</strong> for <strong>{item.text}</strong></>)
+                      : <>{item.verb} <strong>{item.engine}</strong></>}
+                  </span>
+                  {!item.text && (
+                    <span className={styles.resultSub}>
+                      {item.verb === 'Ask' ? 'Type your question…' : 'Type your search…'}
+                    </span>
+                  )}
                 </div>
                 <span className={styles.badge}>{item.engine}</span>
               </div>

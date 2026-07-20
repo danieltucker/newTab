@@ -166,14 +166,18 @@ router.get('/page-meta', requireAuth, async (req: AuthRequest, res: Response): P
       response.body!.on('error', (err) => { if (!settled) { settled = true; reject(err); } });
     });
 
+    const imgMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    const image = imgMatch && /^https?:\/\//i.test(imgMatch[1]) ? decodeEntities(imgMatch[1].trim()) : null;
+
     const ogMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
-    if (ogMatch) { res.json({ title: decodeEntities(ogMatch[1].trim()) }); return; }
+    if (ogMatch) { res.json({ title: decodeEntities(ogMatch[1].trim()), image }); return; }
 
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    res.json({ title: titleMatch ? decodeEntities(titleMatch[1].trim()) : null });
+    res.json({ title: titleMatch ? decodeEntities(titleMatch[1].trim()) : null, image });
   } catch {
-    res.json({ title: null });
+    res.json({ title: null, image: null });
   }
 });
 

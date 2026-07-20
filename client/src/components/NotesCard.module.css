@@ -92,7 +92,7 @@
   border-radius: 12px;
   padding: 12px;
   box-shadow: 0 8px 24px var(--shadow);
-  z-index: 50;
+  z-index: var(--z-content-overlay);
   animation: popIn 0.12s ease;
 }
 
@@ -212,7 +212,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px var(--shadow);
-  z-index: 50;
+  z-index: var(--z-content-overlay);
   overflow: hidden;
   animation: popIn 0.1s ease;
   max-height: 240px;
