@@ -535,7 +535,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
             bookmarks={Object.values(bookmarksByFolder).flat()}
             readingItems={readingList}
             feedArticles={feedArticles.map(a => ({ id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories }))}
-            notes={settings.noteDocs}
+            notes={(settings.noteDocs ?? []).filter(n => !n.deletedAt)}
             onOpenNote={openNoteFromSearch}
           />
         </div>

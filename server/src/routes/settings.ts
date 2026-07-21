@@ -13,7 +13,7 @@ export interface UserSettings {
   weatherLocation: string;
   weatherUnit: 'celsius' | 'fahrenheit';
   notes: string;
-  noteDocs: Array<{ id: string; title: string; body: string; updatedAt?: number }>;
+  noteDocs: Array<{ id: string; title: string; body: string; updatedAt?: number; deletedAt?: number }>;
   clockFormat: '12h' | '24h';
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';

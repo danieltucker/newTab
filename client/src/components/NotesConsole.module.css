@@ -810,6 +810,267 @@
   white-space: nowrap;
 }
 
+/* ── Link dialog ── */
+.linkOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-top) + 3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 22, 30, 0.28);
+  animation: linkFade 0.12s ease;
+}
+
+@keyframes linkFade { from { opacity: 0; } to { opacity: 1; } }
+
+.linkDialog {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  padding: 18px;
+  background: #ffffff;
+  border: 1px solid #e6e7ec;
+  border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(20, 22, 30, 0.24);
+  animation: popIn 0.12s ease;
+}
+
+.linkTitle {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1c2029;
+  margin-bottom: 14px;
+}
+
+.linkField {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.linkLabel {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #9aa0b0;
+  margin-bottom: 4px;
+}
+
+.linkInput {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #e0e2e9;
+  border-radius: 7px;
+  background: #ffffff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: #2b2f3a;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.linkInput::placeholder { color: #b5bac6; }
+
+.linkInput:focus {
+  border-color: #c9c9f5;
+  box-shadow: 0 0 0 3px rgba(91, 91, 230, 0.09);
+}
+
+.linkActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.linkSpacer { flex: 1; }
+
+.linkCancel,
+.linkApply,
+.linkRemove {
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.linkCancel {
+  border: 1px solid #e0e2e9;
+  background: #ffffff;
+  color: #6b7180;
+}
+
+.linkCancel:hover { background: #f2f3f7; color: #2b2f3a; }
+
+.linkApply {
+  border: 1px solid #5b5be6;
+  background: #5b5be6;
+  color: #ffffff;
+}
+
+.linkApply:hover { background: #4a4ad8; border-color: #4a4ad8; }
+
+.linkApply:disabled {
+  background: #d9daf7;
+  border-color: #d9daf7;
+  cursor: not-allowed;
+}
+
+.linkRemove {
+  border: 1px solid transparent;
+  background: none;
+  color: #d64545;
+}
+
+.linkRemove:hover { background: #fdeaea; }
+
+/* ── Recently deleted ── */
+.trashSection {
+  border-top: 1px solid #ebedf1;
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+.trashHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: #9aa0b0;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 0.1s, color 0.12s;
+}
+
+.trashHead:hover { background: #eef0f4; color: #6b7180; }
+
+.trashChevron {
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.trashChevronOpen { transform: rotate(90deg); }
+
+.trashCount {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  color: #b5bac6;
+  letter-spacing: 0.04em;
+}
+
+.trashItem .treeName { color: #6b7180; }
+
+.trashMeta {
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 10.5px;
+  color: #9aa0b0;
+}
+
+.trashActions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.trashItem:hover .trashActions,
+.treeItemActive .trashActions { opacity: 1; }
+
+.trashBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: #9aa0b0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.trashBtn:hover { background: #e7e9ef; color: #444b5a; }
+.trashBtnDanger:hover { background: #fdeaea; color: #e44; }
+
+.trashEmptyBtn {
+  display: block;
+  width: calc(100% - 4px);
+  margin: 4px 2px 2px;
+  padding: 5px 8px;
+  border: 1px dashed #e0e2e9;
+  border-radius: 7px;
+  background: none;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 11.5px;
+  color: #9aa0b0;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.trashEmptyBtn:hover { border-color: #f3cdcd; background: #fdf3f3; color: #d64545; }
+.trashEmptyBtnArmed { border-style: solid; border-color: #f3cdcd; background: #fdeaea; color: #d64545; }
+
+.trashNote {
+  padding: 6px 8px 10px;
+  font-size: 11.5px;
+  color: #9aa0b0;
+  line-height: 1.5;
+}
+
+/* Banner over a note that's sitting in Recently Deleted */
+.trashBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin: 14px 32px 0;
+  padding: 9px 12px;
+  border: 1px solid #f0e2c8;
+  border-radius: 9px;
+  background: #fdf7ec;
+}
+
+.trashBannerText {
+  flex: 1;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12.5px;
+  color: #8a6d3b;
+}
+
+.trashBannerBtn {
+  padding: 5px 11px;
+  border: 1px solid #e0e2e9;
+  border-radius: 7px;
+  background: #ffffff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  color: #2b2f3a;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.trashBannerBtn:hover { border-color: #c9c9f5; color: #5b5be6; background: #f4f4fe; }
+.trashBannerBtnDanger:hover { border-color: #f3cdcd; color: #d64545; background: #fdf3f3; }
+
+.editorReadOnly { cursor: default; }
+.editorReadOnly::before { content: none; }
+
 /* ── Narrow screens: collapse the tree to a horizontal strip ── */
 @media (max-width: 720px) {
   .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }

@@ -15,6 +15,26 @@ function uid(): string {
   return (crypto as any)?.randomUUID?.() ?? `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// ── Recently deleted ──────────────────────────────────────────────────
+// Deleting a note stamps it with `deletedAt` instead of dropping it. It stays
+// recoverable for this long, then is purged the next time the console opens.
+const TRASH_DAYS = 15;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysLeft(deletedAt: number): number {
+  return Math.max(0, Math.ceil((deletedAt + TRASH_DAYS * DAY_MS - Date.now()) / DAY_MS));
+}
+
+function expiryLabel(deletedAt: number): string {
+  const d = daysLeft(deletedAt);
+  if (d <= 0) return 'Deleting today';
+  return `${d} day${d === 1 ? '' : 's'} left`;
+}
+
+function blankNote(): NoteDoc {
+  return { id: uid(), title: '', body: '', updatedAt: Date.now() };
+}
+
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -78,6 +98,18 @@ function markdownToHtml(md: string): string {
   return out.join('') || '<p><br></p>';
 }
 
+// Title and body-text matches, with a line of context for the latter.
+function search(docs: NoteDoc[], q: string): { doc: NoteDoc; snippet?: string }[] {
+  if (!q) return docs.map(doc => ({ doc }));
+  return docs.flatMap(doc => {
+    const text = noteText(doc.body);
+    const at = text.toLowerCase().indexOf(q);
+    const inTitle = doc.title.toLowerCase().includes(q);
+    if (at < 0 && !inTitle) return [];
+    return [{ doc, snippet: at >= 0 ? noteSnippet(text, q) : undefined }];
+  });
+}
+
 interface NoteRowProps {
   doc: NoteDoc;
   active: boolean;
@@ -90,6 +122,29 @@ const DocIcon = () => (
   <svg className={styles.treeIcon} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
     <path d="M14 2v6h6" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg className={styles.treeIcon} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18" /><path d="M8 6V4h8v2" />
+    <path d="M19 6l-1 14H6L5 6" />
+  </svg>
+);
+
+const RestoreIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" />
+  </svg>
+);
+
+const ChevronIcon = ({ open }: { open: boolean }) => (
+  <svg
+    className={`${styles.trashChevron} ${open ? styles.trashChevronOpen : ''}`}
+    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+  >
+    <path d="M9 18l6-6-6-6" />
   </svg>
 );
 
@@ -127,6 +182,48 @@ function NoteRow({ doc, active, snippet, onSelect, onDelete }: NoteRowProps) {
   );
 }
 
+// A row in Recently Deleted: how long it has left, and the two ways out.
+function TrashRow({ doc, active, onSelect, onRestore, onPurge }: {
+  doc: NoteDoc;
+  active: boolean;
+  onSelect: (id: string) => void;
+  onRestore: (id: string) => void;
+  onPurge: (id: string) => void;
+}) {
+  return (
+    <div
+      className={`${styles.treeItem} ${styles.trashItem} ${active ? styles.treeItemActive : ''}`}
+      onClick={() => onSelect(doc.id)}
+    >
+      <TrashIcon />
+      <span className={styles.treeText}>
+        <span className={styles.treeName}>{doc.title.trim() || 'Untitled'}</span>
+        <span className={styles.trashMeta}>{expiryLabel(doc.deletedAt!)}</span>
+      </span>
+      <span className={styles.trashActions}>
+        <button
+          className={styles.trashBtn}
+          onClick={e => { e.stopPropagation(); onRestore(doc.id); }}
+          title="Put this note back"
+          aria-label="Restore note"
+        >
+          <RestoreIcon />
+        </button>
+        <button
+          className={`${styles.trashBtn} ${styles.trashBtnDanger}`}
+          onClick={e => { e.stopPropagation(); onPurge(doc.id); }}
+          title="Delete permanently"
+          aria-label="Delete permanently"
+        >
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M1 1l10 10M11 1L1 11" />
+          </svg>
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function SortableNote({ doc, active, onSelect, onDelete }: NoteRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: doc.id });
   return (
@@ -160,13 +257,20 @@ interface Props {
 export default function NotesConsole({
   docs, legacyNotes, onSave, initialNoteId, initialQuery = '', closing = false, onClose,
 }: Props) {
-  // Seed the working set once: existing docs → migrate legacy note → a blank note.
+  // Seed the working set once: existing docs → migrate legacy note → a blank
+  // note. Anything that has outstayed its 15 days in Recently Deleted is purged
+  // on the way in, and there's always at least one live note to open onto.
   const [initial] = useState<NoteDoc[]>(() => {
-    if (docs && docs.length) return docs;
-    if (legacyNotes && legacyNotes.trim()) {
-      return [{ id: uid(), title: 'Notes', body: markdownToHtml(legacyNotes), updatedAt: Date.now() }];
-    }
-    return [{ id: uid(), title: '', body: '', updatedAt: Date.now() }];
+    const seed: NoteDoc[] =
+      docs && docs.length ? docs
+      : legacyNotes && legacyNotes.trim()
+        ? [{ id: uid(), title: 'Notes', body: markdownToHtml(legacyNotes), updatedAt: Date.now() }]
+        : [blankNote()];
+    const kept = seed.filter(d => !d.deletedAt || Date.now() - d.deletedAt < TRASH_DAYS * DAY_MS);
+    if (!kept.some(d => !d.deletedAt)) kept.unshift(blankNote());
+    // Identity is the signal that nothing had to change — the effect below
+    // persists the seed only when it isn't what's stored.
+    return seed === docs && kept.length === seed.length ? docs : kept;
   });
 
   // docsRef holds the live source of truth (body edits are written here without
@@ -174,9 +278,13 @@ export default function NotesConsole({
   const docsRef = useRef<NoteDoc[]>(initial);
   const [list, setList] = useState<NoteDoc[]>(initial);
   const [activeId, setActiveId] = useState<string>(
-    () => (initialNoteId && initial.some(d => d.id === initialNoteId) ? initialNoteId : initial[0].id)
+    () => (initialNoteId && initial.some(d => d.id === initialNoteId)
+      ? initialNoteId
+      : initial.find(d => !d.deletedAt)!.id)
   );
   const [saved, setSaved] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [armEmpty, setArmEmpty] = useState(false);   // "Empty" asks once before it throws work away
   const [query, setQuery] = useState(initialQuery);
   const queryRef = useRef(query);
   queryRef.current = query;
@@ -204,6 +312,13 @@ export default function NotesConsole({
     saveTimer.current = setTimeout(flush, 700);
   }, [flush]);
 
+  // The seed was rebuilt against stored notes (legacy migration or an expiry
+  // purge) — write it back so what's stored matches what's on screen. A first
+  // blank note isn't worth a save: nothing has been written yet.
+  useEffect(() => {
+    if (initial !== docs && (docs?.length || legacyNotes.trim())) scheduleSave();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const requestClose = useCallback(() => {
     flush();
     onClose();
@@ -225,21 +340,20 @@ export default function NotesConsole({
   }, [requestClose]);
 
   const active = docsRef.current.find(d => d.id === activeId) ?? docsRef.current[0];
+  const activeTrashed = !!active.deletedAt;
+
+  const liveDocs = useMemo(() => list.filter(d => !d.deletedAt), [list]);
+  const trashDocs = useMemo(
+    () => list.filter(d => d.deletedAt).sort((a, b) => b.deletedAt! - a.deletedAt!),
+    [list]
+  );
 
   // Search the tree by title and body text. Body edits are written straight to
   // the doc objects (no re-render), so this recomputes off the live text every
   // time the query changes.
   const q = query.trim().toLowerCase();
-  const results = useMemo(() => {
-    if (!q) return list.map(doc => ({ doc, snippet: undefined as string | undefined }));
-    return list.flatMap(doc => {
-      const text = noteText(doc.body);
-      const at = text.toLowerCase().indexOf(q);
-      const inTitle = doc.title.toLowerCase().includes(q);
-      if (at < 0 && !inTitle) return [];
-      return [{ doc, snippet: at >= 0 ? noteSnippet(text, q) : undefined }];
-    });
-  }, [list, q]);
+  const results = useMemo(() => search(liveDocs, q), [liveDocs, q]);
+  const trashResults = useMemo(() => search(trashDocs, q), [trashDocs, q]);
 
   // Opening a hit from the main search bar: jump to that note once it's known.
   useEffect(() => {
@@ -262,7 +376,7 @@ export default function NotesConsole({
   }
 
   function addNote() {
-    const doc: NoteDoc = { id: uid(), title: '', body: '', updatedAt: Date.now() };
+    const doc = blankNote();
     docsRef.current = [doc, ...docsRef.current];
     setList(docsRef.current);
     setActiveId(doc.id);
@@ -270,13 +384,37 @@ export default function NotesConsole({
     scheduleSave();
   }
 
-  function deleteNote(id: string) {
-    let next = docsRef.current.filter(d => d.id !== id);
-    if (next.length === 0) next = [{ id: uid(), title: '', body: '', updatedAt: Date.now() }];
+  // Commit a new working set, keeping one live note around and moving off a
+  // note that just stopped being viewable.
+  function commit(next: NoteDoc[], leaving?: string) {
+    if (!next.some(d => !d.deletedAt)) next = [blankNote(), ...next];
     docsRef.current = next;
     setList(next);
-    if (id === activeId) setActiveId(next[0].id);
+    setArmEmpty(false);
+    if (leaving && leaving === activeId) setActiveId(next.find(d => !d.deletedAt)!.id);
     scheduleSave();
+  }
+
+  // Deleting moves the note to Recently Deleted rather than dropping it; the
+  // folder springs open so it's clear where the note went.
+  function deleteNote(id: string) {
+    const now = Date.now();
+    commit(docsRef.current.map(d => d.id === id ? { ...d, deletedAt: now } : d), id);
+    setTrashOpen(true);
+  }
+
+  function restoreNote(id: string) {
+    commit(docsRef.current.map(d => d.id === id ? { ...d, deletedAt: undefined } : d));
+    setActiveId(id);
+  }
+
+  function purgeNote(id: string) {
+    commit(docsRef.current.filter(d => d.id !== id), id);
+  }
+
+  function emptyTrash() {
+    if (!armEmpty) { setArmEmpty(true); return; }
+    commit(docsRef.current.filter(d => !d.deletedAt), activeTrashed ? activeId : undefined);
   }
 
   function selectNote(id: string) {
@@ -378,8 +516,8 @@ export default function NotesConsole({
                       ))
                 ) : (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={list.map(d => d.id)} strategy={verticalListSortingStrategy}>
-                      {list.map(d => (
+                    <SortableContext items={liveDocs.map(d => d.id)} strategy={verticalListSortingStrategy}>
+                      {liveDocs.map(d => (
                         <SortableNote
                           key={d.id}
                           doc={d}
@@ -391,22 +529,88 @@ export default function NotesConsole({
                     </SortableContext>
                   </DndContext>
                 )}
+
+                {/* ── Recently deleted ── */}
+                {trashDocs.length > 0 && (
+                  <div className={styles.trashSection}>
+                    <button
+                      className={styles.trashHead}
+                      onClick={() => { setTrashOpen(o => !o); setArmEmpty(false); }}
+                      aria-expanded={trashOpen}
+                    >
+                      <ChevronIcon open={trashOpen} />
+                      Recently deleted
+                      <span className={styles.trashCount}>
+                        {q ? `${trashResults.length}/${trashDocs.length}` : trashDocs.length}
+                      </span>
+                    </button>
+
+                    {trashOpen && (
+                      <>
+                        {trashResults.map(({ doc }) => (
+                          <TrashRow
+                            key={doc.id}
+                            doc={doc}
+                            active={doc.id === activeId}
+                            onSelect={selectNote}
+                            onRestore={restoreNote}
+                            onPurge={purgeNote}
+                          />
+                        ))}
+                        {q && trashResults.length === 0 && (
+                          <div className={styles.trashNote}>Nothing deleted matches “{query.trim()}”.</div>
+                        )}
+                        <div className={styles.trashNote}>
+                          Notes here are deleted for good after {TRASH_DAYS} days.
+                        </div>
+                        <button
+                          className={`${styles.trashEmptyBtn} ${armEmpty ? styles.trashEmptyBtnArmed : ''}`}
+                          onClick={emptyTrash}
+                        >
+                          {armEmpty
+                            ? `Delete ${trashDocs.length} note${trashDocs.length === 1 ? '' : 's'} for good?`
+                            : 'Empty recently deleted'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </aside>
 
             {/* ── Editor ── */}
             <div className={styles.docPane}>
+              {activeTrashed && (
+                <div className={styles.trashBanner}>
+                  <span className={styles.trashBannerText}>
+                    In Recently deleted · {expiryLabel(active.deletedAt!).toLowerCase()}
+                  </span>
+                  <button className={styles.trashBannerBtn} onClick={() => restoreNote(active.id)}>
+                    Restore
+                  </button>
+                  <button
+                    className={`${styles.trashBannerBtn} ${styles.trashBannerBtnDanger}`}
+                    onClick={() => purgeNote(active.id)}
+                  >
+                    Delete now
+                  </button>
+                </div>
+              )}
               <input
                 className={styles.docTitle}
                 value={active.title}
                 onChange={e => handleTitle(e.target.value)}
                 placeholder="Untitled"
                 spellCheck={false}
+                readOnly={activeTrashed}
               />
+              {/* The read-only surface is a different tree, so the key carries
+                  that state too — remounting is what re-renders the body. */}
               <RichEditor
-                key={active.id}
+                key={`${active.id}:${activeTrashed}`}
                 initialHtml={active.body}
                 onChange={handleBody}
+                readOnly={activeTrashed}
               />
             </div>
           </div>

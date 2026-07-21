@@ -286,9 +286,42 @@ function escapeHtml(s: string): string {
           .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── Links ─────────────────────────────────────────────────────────────
+// What the user types in the link dialog is rarely a full URL — "example.com"
+// is the common case, so a bare host gets https://. Anything that already names
+// a scheme, an anchor or a site-root path is left alone; the script-bearing
+// schemes are refused outright rather than rewritten.
+function normalizeUrl(raw: string): string {
+  const s = raw.trim();
+  if (!s) return '';
+  if (/^(javascript|data|vbscript):/i.test(s)) return '';
+  if (/^([a-z][a-z0-9+.-]*:|#|\/|\.\/|\.\.\/)/i.test(s)) return s;
+  return `https://${s}`;
+}
+
+// The <a> the caret sits in (or that the selection lies within), if any — an
+// existing link is edited in place rather than nested inside a new one.
+function anchorAt(editor: HTMLElement): HTMLAnchorElement | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const node = sel.getRangeAt(0).commonAncestorContainer;
+  const el = node.nodeType === Node.ELEMENT_NODE ? node as HTMLElement : node.parentElement;
+  const a = el?.closest('a') as HTMLAnchorElement | null;
+  return a && editor.contains(a) ? a : null;
+}
+
+// State of the link dialog: the fields, plus what the Apply will act on.
+interface LinkForm {
+  url: string;
+  text: string;
+  selected: string;    // text the selection covered when the dialog opened
+  editing: boolean;    // an existing link is being changed
+}
+
 interface Props {
   initialHtml: string;
   onChange: (html: string) => void;
+  readOnly?: boolean;   // notes in Recently Deleted are shown, not edited
 }
 
 interface MenuPos { left: number; top: number | null; bottom: number | null; maxHeight: number; }
@@ -422,9 +455,13 @@ function isBlank(el: HTMLElement): boolean {
   return !el.querySelector(`hr, img, pre, blockquote, ul, ol, h1, h2, h3, table, .${TODO_CLASS}`);
 }
 
-export default function RichEditor({ initialHtml, onChange }: Props) {
+export default function RichEditor({ initialHtml, onChange, readOnly = false }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [linkForm, setLinkForm] = useState<LinkForm | null>(null);
+  // The selection the dialog was opened on. Focusing an input collapses it, so
+  // it's restored before the link is written back.
+  const linkRange = useRef<Range | null>(null);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
   const [slashIdx, setSlashIdx] = useState(0);
@@ -467,7 +504,7 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     const beforeRepair = el.innerHTML;
     normalizeLists(el);
     el.classList.toggle('note-empty', isBlank(el));
-    if (el.innerHTML !== beforeRepair) onChange(el.innerHTML);   // persist the repair
+    if (el.innerHTML !== beforeRepair && !readOnly) onChange(el.innerHTML);   // persist the repair
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = slashQuery ? CMDS.filter(c => cmdMatches(c, slashQuery)) : CMDS;
@@ -508,28 +545,84 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     emit();
   }
 
+  // ── Link dialog ───────────────────────────────────────────────────────
+  // Links are composed in the console itself (text + URL), not in a browser
+  // prompt. Opening stashes the selection — the fields take focus away from the
+  // editor, and the range is what Apply writes into.
   function applyLink() {
+    const editor = ref.current;
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const collapsed = sel.isCollapsed;
-    // prompt() drops the selection, so stash the range and put it back after
-    const saved = sel.getRangeAt(0).cloneRange();
-    const url = window.prompt('Link URL', 'https://');
+    if (!editor || !sel || sel.rangeCount === 0) return;
+
+    const existing = anchorAt(editor);
+    if (existing) {
+      // Select the anchor itself, not its contents — Apply replaces the whole
+      // element, so an edited link can't end up nested inside the old one.
+      const r = document.createRange();
+      r.selectNode(existing);
+      linkRange.current = r;
+      setLinkForm({
+        url: existing.getAttribute('href') ?? '',
+        text: existing.textContent ?? '',
+        selected: existing.textContent ?? '',
+        editing: true,
+      });
+    } else {
+      linkRange.current = sel.getRangeAt(0).cloneRange();
+      const selected = sel.isCollapsed ? '' : sel.toString();
+      setLinkForm({ url: '', text: selected, selected, editing: false });
+    }
+    setBubble(null);
+  }
+
+  // Put the stashed selection back and hand focus to the editor, so execCommand
+  // acts where the user invoked the dialog.
+  function restoreLinkRange(): Selection | null {
+    const sel = window.getSelection();
+    const saved = linkRange.current;
+    if (!sel || !saved) return null;
+    ref.current?.focus();
     sel.removeAllRanges();
     sel.addRange(saved);
-    const href = (url ?? '').trim();
-    if (!href || href === 'https://') return;
-    if (collapsed) {
-      // Invoked from the slash menu with nothing selected — insert the URL as
-      // its own link rather than doing nothing
-      ref.current?.focus();
+    return sel;
+  }
+
+  function closeLink() {
+    setLinkForm(null);
+    linkRange.current = null;
+  }
+
+  function submitLink(form: LinkForm) {
+    const href = normalizeUrl(form.url);
+    if (!href) return;
+    const sel = restoreLinkRange();
+    if (!sel) { closeLink(); return; }
+    const label = form.text.trim();
+
+    // Linking the selection as it stands keeps whatever formatting it holds —
+    // only a changed (or absent) label has to be written as fresh markup.
+    if (form.editing) {
       document.execCommand('insertHTML', false,
-        `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>&nbsp;`);
-      setMarks(readMarks());
-      emit();
-      return;
+        `<a href="${escapeHtml(href)}">${escapeHtml(label || href)}</a>`);
+    } else if (!form.selected) {
+      // Nothing was selected (toolbar or slash menu on a bare caret)
+      document.execCommand('insertHTML', false,
+        `<a href="${escapeHtml(href)}">${escapeHtml(label || href)}</a>&nbsp;`);
+    } else if (label && label !== form.selected.trim()) {
+      document.execCommand('insertHTML', false,
+        `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`);
+    } else {
+      document.execCommand('createLink', false, href);
     }
-    execInline('createLink', href);
+    setMarks(readMarks());
+    emit();
+    closeLink();
+  }
+
+  function removeLink() {
+    const sel = restoreLinkRange();
+    if (sel) { document.execCommand('unlink'); emit(); }
+    closeLink();
   }
 
   // Track the selection to light up the active marks and raise the bubble.
@@ -537,6 +630,7 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     function onSelectionChange() {
       const el = ref.current;
       const sel = window.getSelection();
+      if (readOnly) { setBubble(null); return; }
       if (!el || !sel || sel.rangeCount === 0) { setBubble(null); return; }
       const range = sel.getRangeAt(0);
       if (!el.contains(range.commonAncestorContainer)) return; // selection elsewhere on the page
@@ -550,10 +644,13 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     }
     document.addEventListener('selectionchange', onSelectionChange);
     return () => document.removeEventListener('selectionchange', onSelectionChange);
-  }, []);
+  }, [readOnly]);
 
   // The command menu and the bubble should never be up at the same time
   useEffect(() => { if (slashOpen) setBubble(null); }, [slashOpen]);
+
+  // …nor should the bubble sit over the link dialog
+  useEffect(() => { if (linkForm) setBubble(null); }, [linkForm]);
 
   // Markdown shortcuts: when everything typed so far in the block is one of the
   // MD_RULES triggers, swallow it and turn the block into what it describes.
@@ -1045,6 +1142,28 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     </>
   );
 
+  // A trashed note is shown as it was written: no toolbars, no command menu,
+  // and the surface itself isn't editable.
+  if (readOnly) {
+    return (
+      <div className={styles.editorScroll} ref={scrollRef}>
+        <div
+          ref={ref}
+          className={`${styles.editor} ${styles.editorReadOnly}`}
+          // Links are live here (they aren't in an editable surface), so send
+          // them to a new tab rather than navigating the page out from under
+          // the note.
+          onClick={e => {
+            const a = (e.target as HTMLElement).closest('a');
+            if (!a?.getAttribute('href')) return;
+            e.preventDefault();
+            window.open(a.getAttribute('href')!, '_blank', 'noopener,noreferrer');
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       {/* ── Utility bar ── */}
@@ -1147,7 +1266,91 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
         document.body
       )}
     </div>
+
+    {linkForm && createPortal(
+      <LinkDialog
+        form={linkForm}
+        onChange={setLinkForm}
+        onSubmit={submitLink}
+        onRemove={removeLink}
+        onCancel={closeLink}
+      />,
+      document.body
+    )}
     </>
+  );
+}
+
+// ── Link dialog ─────────────────────────────────────────────────────────
+// Text and URL together, inside the console — Escape is swallowed here so it
+// dismisses the dialog rather than the whole notes window behind it.
+function LinkDialog({ form, onChange, onSubmit, onRemove, onCancel }: {
+  form: LinkForm;
+  onChange: (f: LinkForm) => void;
+  onSubmit: (f: LinkForm) => void;
+  onRemove: () => void;
+  onCancel: () => void;
+}) {
+  const urlRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLInputElement>(null);
+
+  // Land on the field that still needs filling in
+  useEffect(() => {
+    const el = form.url ? textRef.current : urlRef.current;
+    el?.focus();
+    el?.select();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const valid = !!normalizeUrl(form.url);
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    if (e.key === 'Enter' && valid) { e.preventDefault(); onSubmit(form); }
+  }
+
+  return (
+    <div className={styles.linkOverlay} onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className={styles.linkDialog} onKeyDown={onKeyDown} role="dialog" aria-label="Link">
+        <div className={styles.linkTitle}>{form.editing ? 'Edit link' : 'Add link'}</div>
+
+        <label className={styles.linkField}>
+          <span className={styles.linkLabel}>Text</span>
+          <input
+            ref={textRef}
+            className={styles.linkInput}
+            value={form.text}
+            onChange={e => onChange({ ...form, text: e.target.value })}
+            placeholder="Link text"
+            spellCheck={false}
+          />
+        </label>
+
+        <label className={styles.linkField}>
+          <span className={styles.linkLabel}>URL</span>
+          <input
+            ref={urlRef}
+            className={styles.linkInput}
+            value={form.url}
+            onChange={e => onChange({ ...form, url: e.target.value })}
+            placeholder="example.com"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </label>
+
+        <div className={styles.linkActions}>
+          {form.editing && (
+            <button className={styles.linkRemove} onClick={onRemove}>Remove link</button>
+          )}
+          <span className={styles.linkSpacer} />
+          <button className={styles.linkCancel} onClick={onCancel}>Cancel</button>
+          <button className={styles.linkApply} onClick={() => onSubmit(form)} disabled={!valid}>
+            {form.editing ? 'Save' : 'Add link'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

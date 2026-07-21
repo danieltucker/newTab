@@ -11,6 +11,7 @@ export interface NoteDoc {
   title: string;
   body: string;      // HTML from the rich editor
   updatedAt?: number;
+  deletedAt?: number;  // in Recently Deleted since this time; purged after 15 days
 }
 
 export interface UserSettings {
