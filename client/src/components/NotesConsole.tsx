@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core';
@@ -167,6 +167,19 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
     flush();
     onClose();
   }, [flush, onClose]);
+
+  // Escape closes (the header has advertised this all along). The editor's
+  // command menu stops propagation when it's open, so the first Escape there
+  // dismisses the menu and a second one closes the console.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      requestClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [requestClose]);
 
   const active = docsRef.current.find(d => d.id === activeId) ?? docsRef.current[0];
 

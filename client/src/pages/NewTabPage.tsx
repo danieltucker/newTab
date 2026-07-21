@@ -45,6 +45,14 @@ interface Props {
   onLogout: () => void;
 }
 
+// Bare-letter shortcuts must not fire while the user is typing — otherwise "n"
+// in a note or the search box would fling overlays open mid-sentence.
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el.tagName !== 'string') return false;
+  return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+}
+
 export default function NewTabPage({ accessToken, username, isAdmin, themeSetting, resolvedTheme, onSetTheme, onLogout }: Props) {
   const { settings, update: updateSetting, loaded: settingsLoaded } = useSettings(accessToken);
 
@@ -179,6 +187,8 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
 
   // Notes console — slides up from the bottom, opened via the launcher button
   const [showNotes, setShowNotes] = useState(false);
+  const showNotesRef = useRef(false);
+  showNotesRef.current = showNotes;
   const [notesFading, setNotesFading] = useState(false);
   const notesFadingRef = useRef(false);
   notesFadingRef.current = notesFading;
@@ -217,12 +227,28 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     function onKey(e: KeyboardEvent) {
       if (e.code !== 'Backquote') return;
       if (!settings.consoleEnabled) return;
+      if (isTypingTarget(e.target)) return;
       e.preventDefault();
       if (showConsoleRef.current) { closeConsoleRef.current(); } else { setShowConsole(true); }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [settings.consoleEnabled]);
+
+  // "n" opens notes — the same letter the launcher button shows. Escape closes,
+  // handled inside the console itself.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'n' && e.key !== 'N') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (showNotesRef.current) return;
+      e.preventDefault();
+      setShowNotes(true);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Refs for folder-switch animation
   const folderRefs = useRef<Record<string, HTMLDivElement | null>>({});

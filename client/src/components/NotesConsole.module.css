@@ -274,6 +274,74 @@
 
 .docTitle::placeholder { color: #cdd0d9; }
 
+/* ── Formatting toolbar (utility bar above the note, and the selection
+   bubble — they share button styling) ── */
+.toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 32px 8px;
+  border-bottom: 1px solid #ebedf1;
+}
+
+.bubble {
+  position: fixed;
+  z-index: calc(var(--z-top) + 2);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* Sized to its buttons — a fixed width clipped the last one. The exact width
+     is measured after render to centre it over the selection. */
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 4px 6px;
+  background: #ffffff;
+  border: 1px solid #e6e7ec;
+  border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(20, 22, 30, 0.18);
+  animation: popIn 0.1s ease;
+}
+
+.tbBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #5c6270;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.tbBtn:hover { background: #f2f3f7; color: #2b2f3a; }
+
+.tbBtnActive {
+  background: #ecebff;
+  color: #5b5be6;
+}
+
+.tbSep {
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: #e6e7ec;
+}
+
+.tbClear {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
 .editorScroll {
   position: relative;
   flex: 1;
@@ -350,6 +418,24 @@
 
 .editor a { color: #5b5be6; text-decoration: underline; }
 
+/* Inline code span — distinct from the .editor pre block above */
+.editor code {
+  background: #f2f3f7;
+  border: 1px solid #e6e7ec;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.88em;
+  color: #d6336c;
+}
+
+.editor pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
 /* ── To-do items (global class: embedded in saved note HTML) ── */
 :global(.note-todo) {
   position: relative;
@@ -413,6 +499,13 @@
 @keyframes popIn {
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.slashEmpty {
+  padding: 12px;
+  font-size: 12.5px;
+  color: #9aa0b0;
+  text-align: center;
 }
 
 .slashHint {
