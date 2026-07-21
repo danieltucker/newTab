@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import styles from './WorldClockCard.module.css';
+import { useState, useEffect, useRef } from 'react';
+import styles from './HeaderClock.module.css';
 import { ClockZone } from '../hooks/useSettings';
 
 const PRESETS: ClockZone[] = [
@@ -73,18 +73,36 @@ function isDifferentDay(tz: string, now: Date): boolean {
 interface Props {
   zones: ClockZone[];
   onSetZones: (zones: ClockZone[]) => void;
-  onRemove?: () => void;
+  format: '12h' | '24h';
 }
 
-export default function WorldClockCard({ zones, onSetZones, onRemove }: Props) {
+export default function HeaderClock({ zones, onSetZones, format }: Props) {
   const [now, setNow] = useState(() => new Date());
+  const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function onOutside(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setAdding(false);
+        setSearch('');
+      }
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [open]);
+
+  const localFmt = format === '24h' ? TIME_FMT_24H(LOCAL_ZONE) : TIME_FMT_12H(LOCAL_ZONE);
+  const zoneFmt = format === '24h' ? TIME_FMT_24H : TIME_FMT_12H;
 
   const suggestions = search
     ? PRESETS.filter(p =>
@@ -104,69 +122,65 @@ export default function WorldClockCard({ zones, onSetZones, onRemove }: Props) {
   }
 
   return (
-    <div className={styles.card}>
-      <div className={styles.cardLabel}>
-        <span>World Clock</span>
-        <div className={styles.labelRight}>
-          {onRemove && (
-            <button className={styles.removeBtn} onClick={onRemove} title="Remove widget">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
-                <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
+    <div className={styles.wrap} ref={wrapRef}>
+      <button
+        className={`${styles.trigger} ${open ? styles.triggerOpen : ''}`}
+        onClick={() => setOpen(o => !o)}
+        title="World clock"
+      >
+        <span className={styles.time}>{localFmt.format(now)}</span>
+        <svg className={styles.caret} width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 4.5 6 7.5 9 4.5" />
+        </svg>
+      </button>
 
-      {zones.length === 0 && !adding && (
-        <div className={styles.empty}>
-          <button className={styles.addZoneBtn} onClick={() => setAdding(true)}>Add a timezone</button>
-        </div>
-      )}
+      {open && (
+        <div className={styles.popover}>
+          <div className={styles.popLabel}>World Clock</div>
 
-      {zones.map((z, i) => (
-        <div key={`${z.zone}-${i}`} className={styles.zoneRow}>
-          <div className={styles.zoneMain}>
-            <span className={styles.zoneTime}>
-              {(zones.length > 3 ? TIME_FMT_24H(z.zone) : TIME_FMT_12H(z.zone)).format(now)}
-            </span>
-            {isDifferentDay(z.zone, now) && (
-              <span className={styles.zoneDate}>{DATE_FMT(z.zone).format(now)}</span>
-            )}
+          <div className={styles.zoneRow}>
+            <span className={styles.zoneTime}>{localFmt.format(now)}</span>
+            <span className={styles.zoneCity}>Local time</span>
           </div>
-          <span className={styles.zoneCity}>{z.city}</span>
-          <button className={styles.removeZoneBtn} onClick={() => removeZone(i)} title="Remove">×</button>
-        </div>
-      ))}
 
-      {!adding && zones.length > 0 && (
-        <button className={styles.addMore} onClick={() => setAdding(true)}>+ Add timezone</button>
-      )}
-
-      {adding && (
-        <div className={styles.searchWrap}>
-          <input
-            autoFocus
-            className={styles.searchInput}
-            placeholder="Search city…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Escape') { setAdding(false); setSearch(''); } }}
-          />
-          {suggestions.length > 0 && (
-            <div className={styles.suggestions}>
-              {suggestions.map(s => (
-                <button key={`${s.city}-${s.zone}`} className={styles.suggestion} onMouseDown={e => { e.preventDefault(); addZone(s); }}>
-                  <span className={styles.sugCity}>{s.city}</span>
-                  <span className={styles.sugTime}>{TIME_FMT_12H(s.zone).format(now)}</span>
-                </button>
-              ))}
+          {zones.map((z, i) => (
+            <div key={`${z.zone}-${i}`} className={styles.zoneRow}>
+              <span className={styles.zoneTime}>{zoneFmt(z.zone).format(now)}</span>
+              {isDifferentDay(z.zone, now) && (
+                <span className={styles.zoneDate}>{DATE_FMT(z.zone).format(now)}</span>
+              )}
+              <span className={styles.zoneCity}>{z.city}</span>
+              <button className={styles.removeZoneBtn} onClick={() => removeZone(i)} title="Remove">×</button>
             </div>
+          ))}
+
+          {adding ? (
+            <div className={styles.searchWrap}>
+              <input
+                autoFocus
+                className={styles.searchInput}
+                placeholder="Search city…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') { setAdding(false); setSearch(''); } }}
+              />
+              {suggestions.length > 0 && (
+                <div className={styles.suggestions}>
+                  {suggestions.map(s => (
+                    <button key={`${s.city}-${s.zone}`} className={styles.suggestion} onMouseDown={e => { e.preventDefault(); addZone(s); }}>
+                      <span className={styles.sugCity}>{s.city}</span>
+                      <span className={styles.sugTime}>{zoneFmt(s.zone).format(now)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {search && suggestions.length === 0 && (
+                <div className={styles.noResults}>No city found</div>
+              )}
+            </div>
+          ) : (
+            <button className={styles.addMore} onClick={() => setAdding(true)}>+ Add timezone</button>
           )}
-          {search && suggestions.length === 0 && (
-            <div className={styles.noResults}>No city found</div>
-          )}
-          <button className={styles.cancelBtn} onClick={() => { setAdding(false); setSearch(''); }}>Cancel</button>
         </div>
       )}
     </div>

@@ -17,6 +17,10 @@ const LAYOUT_OPTIONS = [
 // Above this many topics, the chip row collapses into a searchable dropdown
 const MAX_TOPIC_CHIPS = 12;
 
+// How long to sit on newly-read ids before sending them up, so a fast scroll
+// through a screenful costs one request instead of a dozen
+const READ_FLUSH_MS = 600;
+
 interface Props {
   folderId: string;
   onSaveArticle: (a: { id: string; url: string; title: string; source: string; categories: string[]; readTime: number | null; imageUrl: string | null }, markSaved: () => void) => void;
@@ -25,6 +29,8 @@ interface Props {
   pageSize?: number;
   layout?: RssLayout;
   onLayoutChange?: (layout: RssLayout) => void;
+  markReadOnScroll?: boolean;
+  onUnreadCountsChange?: (updates: { id: string; unreadCount: number }[]) => void;
 }
 
 function relativeDate(s: string | null): string {
@@ -86,8 +92,9 @@ function magazineVariants(articles: FeedArticle[]): MagVariant[] {
   });
 }
 
-export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10, layout = 'cards', onLayoutChange }: Props) {
+export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10, layout = 'cards', onLayoutChange, markReadOnScroll = true, onUnreadCountsChange }: Props) {
   const seededFolders = useRef<Set<string>>(new Set());
+  const [readIds, setReadIds]           = useState<Set<string>>(new Set());
   const [articles, setArticles]         = useState<FeedArticle[]>([]);
   const [total, setTotal]               = useState(0);
   const [loading, setLoading]           = useState(true);
@@ -121,6 +128,10 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
       const merged = offset === 0 ? data.articles : [...existing, ...data.articles];
       setArticles(merged);
       setTotal(data.total);
+      // Union rather than replace — ids marked read locally this session may not
+      // have reached the server yet
+      const serverRead = data.articles.filter(a => a.read).map(a => a.id);
+      if (serverRead.length > 0) setReadIds(prev => new Set([...prev, ...serverRead]));
     } catch {
       setError('Could not load feed');
     } finally {
@@ -132,10 +143,104 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
   useEffect(() => {
     setArticles([]);
     setTotal(0);
+    setReadIds(new Set());
     setActiveCategory(null);
     setActiveSource(null);
     load(0, []);
   }, [folderId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Read-on-scroll ────────────────────────────────────────────────────
+  // A card flips to read once it has been on screen and then leaves past the
+  // top of the viewport. Requiring it to have been seen first means "load more"
+  // and folder switches can't retroactively mark a backlog you never looked at.
+  const seenRef    = useRef<Set<string>>(new Set());
+  const pendingRef = useRef<Set<string>>(new Set());
+  const cardEls    = useRef<Map<string, HTMLElement>>(new Map());
+  // Mirrors readIds — the observer callback can't see fresh state through its closure
+  const readIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => { readIdsRef.current = new Set(readIds); }, [readIds]);
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const flushRead = useCallback(async () => {
+    if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+    const itemIds = Array.from(pendingRef.current);
+    if (itemIds.length === 0) return;
+    pendingRef.current.clear();
+    try {
+      const r = await apiFetch(`/api/v1/folders/${folderId}/articles/read`, {
+        method: 'POST',
+        body: JSON.stringify({ itemIds }),
+      });
+      if (!r.ok) return;
+      const data: { bookmarks: { id: string; unreadCount: number }[] } = await r.json();
+      if (data.bookmarks?.length) onUnreadCountsChange?.(data.bookmarks);
+    } catch {
+      // Read state is disposable — a failed flush just means it re-marks later
+    }
+  }, [folderId, onUnreadCountsChange]);
+
+  // Keeps unmount/visibility handlers off the flushRead identity
+  const flushRef = useRef(flushRead);
+  useEffect(() => { flushRef.current = flushRead; }, [flushRead]);
+
+  useEffect(() => {
+    if (!markReadOnScroll) return;
+    const obs = new IntersectionObserver(entries => {
+      const justRead: string[] = [];
+      for (const entry of entries) {
+        const id = (entry.target as HTMLElement).dataset.articleId;
+        if (!id) continue;
+        if (entry.isIntersecting) { seenRef.current.add(id); continue; }
+        // Only an exit past the top counts — leaving via the bottom means the
+        // card scrolled back down out of view, which isn't "read"
+        const rootTop = entry.rootBounds?.top ?? 0;
+        if (seenRef.current.has(id) && !readIdsRef.current.has(id) &&
+            entry.boundingClientRect.bottom <= rootTop) {
+          justRead.push(id);
+        }
+      }
+      if (justRead.length === 0) return;
+      // Outline clears immediately; the server hears about it on the next flush
+      for (const id of justRead) readIdsRef.current.add(id);
+      setReadIds(new Set(readIdsRef.current));
+      for (const id of justRead) pendingRef.current.add(id);
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      flushTimer.current = setTimeout(() => { flushRef.current(); }, READ_FLUSH_MS);
+    });
+    observerRef.current = obs;
+    // Cards mounted before this effect ran (ref callbacks fire first on the
+    // commit that renders them) still need picking up
+    for (const el of cardEls.current.values()) obs.observe(el);
+    return () => {
+      obs.disconnect();
+      observerRef.current = null;
+    };
+  }, [markReadOnScroll, folderId]);
+
+  // Don't lose queued ids to a tab close or a folder switch
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === 'hidden') flushRef.current(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      flushRef.current();
+    };
+  }, [folderId]);
+
+  useEffect(() => { seenRef.current = new Set(); }, [folderId]);
+
+  const observeCard = useCallback((el: HTMLDivElement | null, id: string) => {
+    if (el) {
+      el.dataset.articleId = id;
+      cardEls.current.set(id, el);
+      observerRef.current?.observe(el);
+    } else {
+      const prev = cardEls.current.get(id);
+      if (prev) observerRef.current?.unobserve(prev);
+      cardEls.current.delete(id);
+    }
+  }, []);
 
   // Infinite scroll — when the sentinel below the list enters the viewport,
   // fetch the next page (the button remains as a manual fallback)
@@ -266,6 +371,8 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
             key={a.id}
             article={a}
             variant={variants?.[i]}
+            isNew={markReadOnScroll && !readIds.has(a.id)}
+            cardRef={markReadOnScroll ? observeCard : undefined}
             onSave={() => handleSave(a)}
             onDismiss={() => handleDismiss(a.id)}
           />
@@ -287,8 +394,9 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
   );
 }
 
-function ArticleCard({ article, variant, onSave, onDismiss }: {
-  article: FeedArticle; variant?: MagVariant;
+function ArticleCard({ article, variant, isNew, cardRef, onSave, onDismiss }: {
+  article: FeedArticle; variant?: MagVariant; isNew?: boolean;
+  cardRef?: (el: HTMLDivElement | null, id: string) => void;
   onSave: () => void; onDismiss: () => void;
 }) {
   const domain = domainOf(article.link);
@@ -306,6 +414,7 @@ function ArticleCard({ article, variant, onSave, onDismiss }: {
   const hasHero = showImage && !!article.imageUrl;
   const wrapClass = [
     styles.cardWrap,
+    isNew ? styles.unread : '',
     variant === 'feature' ? styles.featureWrap : '',
     variant === 'brief' ? styles.briefWrap : '',
     variant === 'text' ? styles.textWrap : '',
@@ -314,7 +423,7 @@ function ArticleCard({ article, variant, onSave, onDismiss }: {
   ].filter(Boolean).join(' ');
 
   return (
-    <div className={wrapClass}>
+    <div className={wrapClass} ref={cardRef ? el => cardRef(el, article.id) : undefined}>
       <div className={styles.card}>
         {showImage && article.imageUrl && (
           <img
@@ -350,6 +459,7 @@ function ArticleCard({ article, variant, onSave, onDismiss }: {
             <span className={styles.domain}>{domain}</span>
           </div>
           <div className={styles.cardRight}>
+            {isNew && <span className={styles.newDot} role="img" aria-label="Unread" title="Unread" />}
             <span className={styles.date}>{relativeDate(article.pubDate)}</span>
           </div>
         </div>

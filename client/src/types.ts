@@ -19,6 +19,7 @@ export interface FeedArticle {
   snippet: string | null;
   imageUrl: string | null;
   categories: string[];
+  read?: boolean;
 }
 
 export interface Bookmark {

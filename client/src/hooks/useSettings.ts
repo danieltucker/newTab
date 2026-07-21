@@ -6,6 +6,13 @@ export interface ClockZone {
   zone: string;
 }
 
+export interface NoteDoc {
+  id: string;
+  title: string;
+  body: string;      // HTML from the rich editor
+  updatedAt?: number;
+}
+
 export interface UserSettings {
   searchEngine: 'google' | 'duckduckgo' | 'bing' | 'brave';
   searchNewTab: boolean;
@@ -14,6 +21,7 @@ export interface UserSettings {
   weatherLocation: string;
   weatherUnit: 'celsius' | 'fahrenheit';
   notes: string;
+  noteDocs?: NoteDoc[];
   clockFormat: '12h' | '24h';
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
@@ -23,6 +31,7 @@ export interface UserSettings {
   readingListLayout?: 'list' | 'cards' | 'magazine';
   rssEnabled?: boolean;
   saveArticleMode?: 'dialog' | 'instant';
+  markReadOnScroll?: boolean;
   activeWidgets: string[];
   worldClockZones: ClockZone[];
   rssFeedUrls: string[];
@@ -37,6 +46,7 @@ const DEFAULTS: UserSettings = {
   weatherLocation: '',
   weatherUnit: 'celsius',
   notes: '',
+  noteDocs: [],
   clockFormat: '12h',
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',
@@ -46,6 +56,7 @@ const DEFAULTS: UserSettings = {
   readingListLayout: 'cards',
   rssEnabled: true,
   saveArticleMode: 'dialog',
+  markReadOnScroll: true,
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],

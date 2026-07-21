@@ -213,9 +213,16 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
       prisma.feedItem.count({ where }),
     ]);
 
+    const reads = await prisma.readFeedItem.findMany({
+      where: { userId: req.userId!, itemId: { in: items.map(i => i.id) } },
+      select: { itemId: true },
+    });
+    const readIds = new Set(reads.map(r => r.itemId));
+
     const articles = items.map(i => {
       const feed = feedById.get(i.feedId);
       return {
+        read: readIds.has(i.id),
         id: i.id,
         feedUrl: feed?.fetchUrl ?? '',
         title: i.title,
@@ -233,6 +240,84 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
     res.json({ articles, total, hasMore: offset + articles.length < total });
   } catch (err) {
     logger.error(err, 'Feed articles error');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+function hostOf(url: string): string {
+  try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; }
+}
+
+// Marks items read for this user (idempotent) and draws down the unread badge
+// on whichever site tile the article came from. Articles and bookmarks have no
+// stored relation, so they're matched on the link's hostname — an exact match
+// on bookmark.domain, or a subdomain of it (news.bbc.co.uk → bbc.co.uk).
+// Returns the bookmarks whose counts changed so the client can sync badges.
+router.post('/:id/articles/read', async (req: AuthRequest, res: Response): Promise<void> => {
+  const ids: unknown = req.body?.itemIds;
+  if (!Array.isArray(ids) || ids.some(i => typeof i !== 'string')) {
+    res.status(400).json({ error: 'itemIds must be an array of strings' });
+    return;
+  }
+  const itemIds = (ids as string[]).slice(0, 200);
+  if (itemIds.length === 0) { res.json({ bookmarks: [] }); return; }
+
+  try {
+    const folder = await prisma.folder.findFirst({ where: { id: req.params.id, userId: req.userId! } });
+    if (!folder) { res.status(404).json({ error: 'Not found' }); return; }
+
+    // Only items becoming read for the first time may decrement a badge,
+    // otherwise a re-scroll would drive counts down repeatedly
+    const already = await prisma.readFeedItem.findMany({
+      where: { userId: req.userId!, itemId: { in: itemIds } },
+      select: { itemId: true },
+    });
+    const alreadyRead = new Set(already.map(r => r.itemId));
+    const fresh = itemIds.filter(id => !alreadyRead.has(id));
+    if (fresh.length === 0) { res.json({ bookmarks: [] }); return; }
+
+    const items = await prisma.feedItem.findMany({
+      where: { id: { in: fresh } },
+      select: { id: true, link: true },
+    });
+    await prisma.readFeedItem.createMany({
+      data: items.map(i => ({ userId: req.userId!, itemId: i.id })),
+      skipDuplicates: true,
+    });
+
+    const readsByHost = new Map<string, number>();
+    for (const i of items) {
+      const host = hostOf(i.link);
+      if (host) readsByHost.set(host, (readsByHost.get(host) ?? 0) + 1);
+    }
+
+    const candidates = await prisma.bookmark.findMany({
+      where: { userId: req.userId!, unreadCount: { gt: 0 } },
+      select: { id: true, domain: true, unreadCount: true },
+    });
+    const updates = candidates
+      .map(b => {
+        const domain = b.domain.toLowerCase().replace(/^www\./, '');
+        let hits = 0;
+        for (const [host, n] of readsByHost) {
+          if (host === domain || host.endsWith(`.${domain}`)) hits += n;
+        }
+        return { id: b.id, unreadCount: Math.max(0, b.unreadCount - hits), hits };
+      })
+      .filter(u => u.hits > 0);
+
+    if (updates.length > 0) {
+      await prisma.$transaction(updates.map(u =>
+        prisma.bookmark.updateMany({
+          where: { id: u.id, userId: req.userId! },
+          data: { unreadCount: u.unreadCount },
+        })
+      ));
+    }
+
+    res.json({ bookmarks: updates.map(({ id, unreadCount }) => ({ id, unreadCount })) });
+  } catch (err) {
+    logger.error(err, 'Mark articles read error');
     res.status(500).json({ error: 'Server error' });
   }
 });

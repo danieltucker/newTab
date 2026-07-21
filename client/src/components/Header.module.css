@@ -1,10 +1,23 @@
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .left {}
+
+/* Weather + clock cluster, aligned to the greeting row so it sits clear of the
+   account/settings icons floating in the top bar above it. */
+.widgets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 2px;
+}
+
+@media (max-width: 560px) {
+  .widgets { display: none; }
+}
 
 .logo {
   display: flex;

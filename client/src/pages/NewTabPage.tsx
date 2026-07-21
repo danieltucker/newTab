@@ -5,7 +5,6 @@ import SearchBar from '../components/SearchBar';
 import FolderSidebar from '../components/FolderSidebar';
 import BookmarksGrid from '../components/BookmarksGrid';
 import ReadingList from '../components/ReadingList';
-import Widgets from '../components/Widgets';
 import AddLinkModal from '../components/AddLinkModal';
 import NewFolderModal from '../components/NewFolderModal';
 import EditBookmarkModal from '../components/EditBookmarkModal';
@@ -14,6 +13,7 @@ import SettingsModal, { Section as SettingsSection, UserProfile } from '../compo
 import ImportBookmarksModal from '../components/ImportBookmarksModal';
 import ArticleModal from '../components/ArticleModal';
 import Console from '../components/Console';
+import NotesConsole from '../components/NotesConsole';
 import FolderArticles from '../components/FolderArticles';
 import SaveArticleModal from '../components/SaveArticleModal';
 import AdminModal from '../components/AdminModal';
@@ -176,6 +176,19 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
   }
   const closeConsoleRef = useRef(closeConsole);
   closeConsoleRef.current = closeConsole;
+
+  // Notes console — slides up from the bottom, opened via the launcher button
+  const [showNotes, setShowNotes] = useState(false);
+  const [notesFading, setNotesFading] = useState(false);
+  const notesFadingRef = useRef(false);
+  notesFadingRef.current = notesFading;
+
+  function closeNotes() {
+    if (notesFadingRef.current) return;
+    setNotesFading(true);
+    setTimeout(() => { setShowNotes(false); setNotesFading(false); }, 320);
+  }
+
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
@@ -260,6 +273,21 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
 
   const activeFolder = folders.find(f => f.id === activeFolderId) ?? null;
 
+  // The search bar is position:sticky. A zero-height sentinel just above it
+  // tells us when it has pinned to the top, so we can reveal the glass backdrop.
+  const [searchStuck, setSearchStuck] = useState(false);
+  const searchSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = searchSentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setSearchStuck(!entry.isIntersecting),
+      { rootMargin: '-15px 0px 0px 0px', threshold: 0 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
   async function handleAddLink(payload: {
     folderId: string; domain: string; name: string; faviconUrl: string; color: string;
   }) {
@@ -321,6 +349,20 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
       return next;
     });
   }
+
+  // Scrolling past a feed article draws down the badge on the site it came
+  // from; the server does the article→site matching and reports the new counts
+  const handleUnreadCountsChange = useCallback((updates: { id: string; unreadCount: number }[]) => {
+    const byId = new Map(updates.map(u => [u.id, u.unreadCount]));
+    const apply = (b: Bookmark) => byId.has(b.id) ? { ...b, unreadCount: byId.get(b.id)! } : b;
+    setBookmarks(prev => prev.map(apply));
+    setBookmarksByFolder(prev => {
+      const next: Record<string, Bookmark[]> = {};
+      for (const [folderId, list] of Object.entries(prev)) next[folderId] = list.map(apply);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [setBookmarks, CACHE_KEY]);
 
   async function handleDeleteFolder(id: string) {
     await deleteFolder(id);
@@ -439,8 +481,18 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
       </div>
 
         <div className={styles.header}>
-          <Header />
+          <Header
+            weatherLocation={settings.weatherLocation}
+            weatherUnit={settings.weatherUnit}
+            onSetWeatherLocation={loc => updateSetting({ weatherLocation: loc })}
+            onSetWeatherUnit={unit => updateSetting({ weatherUnit: unit })}
+            clockZones={settings.worldClockZones ?? []}
+            onSetClockZones={zones => updateSetting({ worldClockZones: zones })}
+            clockFormat={settings.clockFormat ?? '12h'}
+          />
         </div>
+        <div ref={searchSentinelRef} className={styles.searchSentinel} aria-hidden="true" />
+        <div className={`${styles.searchGlass} ${searchStuck ? styles.searchGlassStuck : ''}`} aria-hidden="true" />
         <div className={styles.searchbar}>
           <SearchBar
             searchEngine={settings.searchEngine}
@@ -464,10 +516,6 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
               onMarkFolderRead={handleMarkFolderRead}
               onReorderFolders={reorderFolders}
               folderRefs={folderRefs}
-            />
-            <Widgets
-              settings={settings}
-              onUpdateSettings={updateSetting}
             />
           </div>
 
@@ -526,6 +574,8 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
                 pageSize={settings.rssFeedPageSize ?? 10}
                 layout={settings.rssLayout ?? 'cards'}
                 onLayoutChange={l => updateSetting({ rssLayout: l })}
+                markReadOnScroll={settings.markReadOnScroll !== false}
+                onUnreadCountsChange={handleUnreadCountsChange}
               />
             )}
           </div>
@@ -533,10 +583,22 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
 
         <footer className={styles.footer}>
           <a href="https://github.com/danieltucker/newTab" target="_blank" rel="noopener noreferrer" className={styles.footerLink}>
-            v1.1.0
+            v1.4.3
           </a>
         </footer>
       </div>
+
+      {/* Notes launcher — small round button, bottom-right */}
+      {!showNotes && (
+        <button
+          className={styles.notesLauncher}
+          onClick={() => setShowNotes(true)}
+          title="Notes"
+          aria-label="Open notes"
+        >
+          <span className={styles.notesLauncherLetter} aria-hidden>n</span>
+        </button>
+      )}
 
       {showAddLink && (
         <AddLinkModal
@@ -653,10 +715,22 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
           folders={folders}
           theme={resolvedTheme}
           onSelectFolder={setActiveFolderId}
+          onCreateFolder={handleCreateFolder}
           onSetTheme={handleSetTheme}
           onRefreshFeeds={() => setFeedRefreshKey(k => k + 1)}
+          onAddSite={handleAddLink}
           closing={consoleFading}
           onClose={closeConsole}
+        />
+      )}
+
+      {showNotes && (
+        <NotesConsole
+          docs={settings.noteDocs ?? []}
+          legacyNotes={settings.notes}
+          onSave={noteDocs => updateSetting({ noteDocs })}
+          closing={notesFading}
+          onClose={closeNotes}
         />
       )}
     </div>

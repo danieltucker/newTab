@@ -26,6 +26,52 @@
   animation: rise 0.48s 0.06s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+/* Observed only (via IntersectionObserver) to detect when .searchbar pins;
+   the negative margin keeps it out of the layout. */
+.searchSentinel {
+  height: 1px;
+  margin-bottom: -1px;
+  pointer-events: none;
+}
+
+/* Liquid-glass backdrop — a full-width layer pinned to the top, revealed once
+   the search bar floats. It frosts the content scrolling underneath; the mask
+   fades the whole layer (tint AND blur) from visible at the top to nothing at
+   the bottom, so there's no hard edge. Sits just under the bar (--z-sticky). */
+.searchGlass {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 150px;
+  z-index: calc(var(--z-sticky) - 1);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--surface) 60%, transparent),
+    color-mix(in oklab, var(--surface) 30%, transparent)
+  );
+  backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 52%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 52%, transparent 100%);
+  opacity: 0;
+  transform: translateY(-12px);
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+
+.searchGlassStuck {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchGlass {
+    transform: none;
+    transition: opacity 0.2s ease;
+  }
+}
+
 .bodyGrid {
   margin-top: 28px;
   display: grid;
@@ -149,6 +195,63 @@
 
 .footerLink:hover {
   opacity: 0.75;
+}
+
+/* ── Notes launcher ──
+   Small off-white round button pinned to the bottom-right; opens the notes
+   console (as does "/"). Sits below modal/console layers so it's covered when
+   an overlay is up. */
+.notesLauncher {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: var(--z-content-overlay);
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  background: #f4f4f2;
+  border: 1px solid rgba(20, 22, 30, 0.10);
+  box-shadow: 0 3px 10px rgba(20, 22, 30, 0.16), 0 1px 3px rgba(20, 22, 30, 0.12);
+  cursor: pointer;
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s, background 0.16s;
+  animation: notesLauncherIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.notesLauncher:hover {
+  background: #fafaf9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(20, 22, 30, 0.22), 0 1px 3px rgba(20, 22, 30, 0.12);
+}
+
+.notesLauncher:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.notesLauncherLetter {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  background: linear-gradient(135deg, #9B8CFF 0%, #5BC8E6 55%, #36D6A6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+@keyframes notesLauncherIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.85); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notesLauncher { animation: none; }
 }
 
 /* ── Ambient background ──

@@ -442,6 +442,22 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport, i
                 </div>
 
                 <div className={styles.sectionBlock}>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Mark articles read as you scroll</div>
+                      <div className={styles.rowHint}>
+                        Unread articles carry a highlighted outline. Scrolling one past the top of
+                        the screen marks it read and takes it off its site’s unread badge.
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={settings.markReadOnScroll !== false}
+                      onChange={v => onUpdate({ markReadOnScroll: v })}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
                   <div className={styles.blockTitle}>Saving articles</div>
                   <div className={styles.openModeList}>
                     {([

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './Header.module.css';
+import HeaderWeather from './HeaderWeather';
+import HeaderClock from './HeaderClock';
+import { ClockZone } from '../hooks/useSettings';
 
 function NewtMark() {
   return (
@@ -32,7 +35,20 @@ function formatDate(): string {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-export default function Header() {
+interface Props {
+  weatherLocation: string;
+  weatherUnit: 'celsius' | 'fahrenheit';
+  onSetWeatherLocation: (loc: string) => void;
+  onSetWeatherUnit: (unit: 'celsius' | 'fahrenheit') => void;
+  clockZones: ClockZone[];
+  onSetClockZones: (zones: ClockZone[]) => void;
+  clockFormat: '12h' | '24h';
+}
+
+export default function Header({
+  weatherLocation, weatherUnit, onSetWeatherLocation, onSetWeatherUnit,
+  clockZones, onSetClockZones, clockFormat,
+}: Props) {
   const [greeting, setGreeting] = useState(getGreeting);
   const [date, setDate] = useState(formatDate);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -54,6 +70,20 @@ export default function Header() {
         </div>
         <div className={styles.greeting}>{greeting}</div>
         <div className={styles.date}>{date}</div>
+      </div>
+
+      <div className={styles.widgets}>
+        <HeaderWeather
+          location={weatherLocation}
+          unit={weatherUnit}
+          onSetLocation={onSetWeatherLocation}
+          onSetUnit={onSetWeatherUnit}
+        />
+        <HeaderClock
+          zones={clockZones}
+          onSetZones={onSetClockZones}
+          format={clockFormat}
+        />
       </div>
     </header>
   );

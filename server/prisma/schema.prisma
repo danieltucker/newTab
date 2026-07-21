@@ -26,6 +26,7 @@ model User {
   readingList   ReadingListItem[]
   refreshTokens RefreshToken[]
   dismissedFeedItems DismissedFeedItem[]
+  readFeedItems      ReadFeedItem[]
 }
 
 model RefreshToken {
@@ -81,6 +82,7 @@ model FeedItem {
   imageUrl   String?
   categories String[]  @default([])
   dismissals DismissedFeedItem[]
+  reads      ReadFeedItem[]
 
   @@unique([feedId, link])
   @@index([feedId])
@@ -98,6 +100,19 @@ model DismissedFeedItem {
 
   @@id([userId, folderId, itemId])
   @@index([folderId, userId])
+}
+
+// Read state is per-user but NOT per-folder: an item you scrolled past in one
+// folder stays read everywhere it appears.
+model ReadFeedItem {
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId String
+  item   FeedItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  readAt DateTime @default(now())
+
+  @@id([userId, itemId])
+  @@index([userId])
 }
 
 model Bookmark {

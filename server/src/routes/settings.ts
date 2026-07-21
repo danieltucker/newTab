@@ -13,6 +13,7 @@ export interface UserSettings {
   weatherLocation: string;
   weatherUnit: 'celsius' | 'fahrenheit';
   notes: string;
+  noteDocs: Array<{ id: string; title: string; body: string; updatedAt?: number }>;
   clockFormat: '12h' | '24h';
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
@@ -22,6 +23,7 @@ export interface UserSettings {
   readingListLayout?: 'list' | 'cards' | 'magazine';
   rssEnabled?: boolean;
   saveArticleMode?: 'dialog' | 'instant';
+  markReadOnScroll?: boolean;
   activeWidgets: string[];
   worldClockZones: Array<{ city: string; zone: string }>;
   rssFeedUrls: string[];
@@ -35,6 +37,7 @@ const DEFAULTS: UserSettings = {
   weatherLocation: '',
   weatherUnit: 'celsius',
   notes: '',
+  noteDocs: [],
   clockFormat: '12h',
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',
@@ -44,6 +47,7 @@ const DEFAULTS: UserSettings = {
   readingListLayout: 'cards',
   rssEnabled: true,
   saveArticleMode: 'dialog',
+  markReadOnScroll: true,
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],
@@ -68,7 +72,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode']);
+  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll']);
   const incoming = req.body as Record<string, unknown>;
 
   // Validate keys
