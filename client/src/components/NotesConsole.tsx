@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core';
@@ -9,6 +9,7 @@ import { CSS } from '@dnd-kit/utilities';
 import styles from './NotesConsole.module.css';
 import RichEditor from './RichEditor';
 import { NoteDoc } from '../hooks/useSettings';
+import { noteText, noteSnippet } from '../utils/noteText';
 
 function uid(): string {
   return (crypto as any)?.randomUUID?.() ?? `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -77,14 +78,56 @@ function markdownToHtml(md: string): string {
   return out.join('') || '<p><br></p>';
 }
 
-interface SortableNoteProps {
+interface NoteRowProps {
   doc: NoteDoc;
   active: boolean;
+  snippet?: string;          // body context, shown when a search matched the text
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-function SortableNote({ doc, active, onSelect, onDelete }: SortableNoteProps) {
+const DocIcon = () => (
+  <svg className={styles.treeIcon} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+  </svg>
+);
+
+function DeleteBtn({ id, onDelete }: { id: string; onDelete: (id: string) => void }) {
+  return (
+    <button
+      className={styles.treeDelete}
+      onClick={e => { e.stopPropagation(); onDelete(id); }}
+      onPointerDown={e => e.stopPropagation()}
+      title="Delete note"
+      aria-label="Delete note"
+    >
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        <path d="M1 1l10 10M11 1L1 11" />
+      </svg>
+    </button>
+  );
+}
+
+// Plain (non-draggable) row — used while a search filters the tree, since
+// dropping onto a filtered list can't express a position in the full order.
+function NoteRow({ doc, active, snippet, onSelect, onDelete }: NoteRowProps) {
+  return (
+    <div
+      className={`${styles.treeItem} ${active ? styles.treeItemActive : ''} ${snippet ? styles.treeItemHit : ''}`}
+      onClick={() => onSelect(doc.id)}
+    >
+      <DocIcon />
+      <span className={styles.treeText}>
+        <span className={styles.treeName}>{doc.title.trim() || 'Untitled'}</span>
+        {snippet && <span className={styles.treeSnippet}>{snippet}</span>}
+      </span>
+      <DeleteBtn id={doc.id} onDelete={onDelete} />
+    </div>
+  );
+}
+
+function SortableNote({ doc, active, onSelect, onDelete }: NoteRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: doc.id });
   return (
     <div
@@ -95,22 +138,11 @@ function SortableNote({ doc, active, onSelect, onDelete }: SortableNoteProps) {
       {...attributes}
       {...listeners}
     >
-      <svg className={styles.treeIcon} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <path d="M14 2v6h6" />
-      </svg>
-      <span className={styles.treeName}>{doc.title.trim() || 'Untitled'}</span>
-      <button
-        className={styles.treeDelete}
-        onClick={e => { e.stopPropagation(); onDelete(doc.id); }}
-        onPointerDown={e => e.stopPropagation()}
-        title="Delete note"
-        aria-label="Delete note"
-      >
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-          <path d="M1 1l10 10M11 1L1 11" />
-        </svg>
-      </button>
+      <DocIcon />
+      <span className={styles.treeText}>
+        <span className={styles.treeName}>{doc.title.trim() || 'Untitled'}</span>
+      </span>
+      <DeleteBtn id={doc.id} onDelete={onDelete} />
     </div>
   );
 }
@@ -119,11 +151,15 @@ interface Props {
   docs: NoteDoc[];
   legacyNotes: string;      // old settings.notes, migrated on first use
   onSave: (docs: NoteDoc[]) => Promise<unknown> | void;
+  initialNoteId?: string;   // opened from a search hit in the main search bar
+  initialQuery?: string;    // …and the term that found it, seeded into the filter
   closing?: boolean;
   onClose: () => void;
 }
 
-export default function NotesConsole({ docs, legacyNotes, onSave, closing = false, onClose }: Props) {
+export default function NotesConsole({
+  docs, legacyNotes, onSave, initialNoteId, initialQuery = '', closing = false, onClose,
+}: Props) {
   // Seed the working set once: existing docs → migrate legacy note → a blank note.
   const [initial] = useState<NoteDoc[]>(() => {
     if (docs && docs.length) return docs;
@@ -137,8 +173,13 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
   // re-rendering, so typing never churns React); `list` mirrors it for the tree.
   const docsRef = useRef<NoteDoc[]>(initial);
   const [list, setList] = useState<NoteDoc[]>(initial);
-  const [activeId, setActiveId] = useState<string>(initial[0].id);
+  const [activeId, setActiveId] = useState<string>(
+    () => (initialNoteId && initial.some(d => d.id === initialNoteId) ? initialNoteId : initial[0].id)
+  );
   const [saved, setSaved] = useState(false);
+  const [query, setQuery] = useState(initialQuery);
+  const queryRef = useRef(query);
+  queryRef.current = query;
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirtyRef = useRef(false);
@@ -170,11 +211,13 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
 
   // Escape closes (the header has advertised this all along). The editor's
   // command menu stops propagation when it's open, so the first Escape there
-  // dismisses the menu and a second one closes the console.
+  // dismisses the menu and a second one closes the console. An active search
+  // filter is likewise cleared first, before the console will close.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       e.preventDefault();
+      if (queryRef.current) { setQuery(''); return; }
       requestClose();
     }
     document.addEventListener('keydown', onKey);
@@ -182,6 +225,26 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
   }, [requestClose]);
 
   const active = docsRef.current.find(d => d.id === activeId) ?? docsRef.current[0];
+
+  // Search the tree by title and body text. Body edits are written straight to
+  // the doc objects (no re-render), so this recomputes off the live text every
+  // time the query changes.
+  const q = query.trim().toLowerCase();
+  const results = useMemo(() => {
+    if (!q) return list.map(doc => ({ doc, snippet: undefined as string | undefined }));
+    return list.flatMap(doc => {
+      const text = noteText(doc.body);
+      const at = text.toLowerCase().indexOf(q);
+      const inTitle = doc.title.toLowerCase().includes(q);
+      if (at < 0 && !inTitle) return [];
+      return [{ doc, snippet: at >= 0 ? noteSnippet(text, q) : undefined }];
+    });
+  }, [list, q]);
+
+  // Opening a hit from the main search bar: jump to that note once it's known.
+  useEffect(() => {
+    if (initialNoteId && docsRef.current.some(d => d.id === initialNoteId)) setActiveId(initialNoteId);
+  }, [initialNoteId]);
 
   // Body edits: write straight to the ref (no re-render) + debounce a save.
   const handleBody = useCallback((html: string) => {
@@ -203,6 +266,7 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
     docsRef.current = [doc, ...docsRef.current];
     setList(docsRef.current);
     setActiveId(doc.id);
+    setQuery('');   // an empty new note would be hidden by an active filter
     scheduleSave();
   }
 
@@ -246,6 +310,8 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
               <span className={styles.headerHints}>
                 <kbd>/</kbd>commands
                 <span className={styles.dot}>·</span>
+                <kbd>tab</kbd>indent
+                <span className={styles.dot}>·</span>
                 <kbd>esc</kbd>close
               </span>
               <button className={styles.closeBtn} onClick={requestClose} title="Close">
@@ -260,27 +326,71 @@ export default function NotesConsole({ docs, legacyNotes, onSave, closing = fals
             {/* ── Note tree ── */}
             <aside className={styles.tree}>
               <div className={styles.treeHead}>
-                <span className={styles.treeLabel}>All notes</span>
+                <span className={styles.treeLabel}>
+                  {q ? `${results.length} match${results.length === 1 ? '' : 'es'}` : 'All notes'}
+                </span>
                 <button className={styles.addBtn} onClick={addNote} title="New note" aria-label="New note">
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
                     <path d="M7 2v10M2 7h10" />
                   </svg>
                 </button>
               </div>
+
+              <div className={styles.searchWrap}>
+                <svg className={styles.searchIcon} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                </svg>
+                <input
+                  className={styles.searchInput}
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search notes"
+                  aria-label="Search notes"
+                  spellCheck={false}
+                />
+                {query && (
+                  <button
+                    className={styles.searchClear}
+                    onClick={() => setQuery('')}
+                    title="Clear search"
+                    aria-label="Clear search"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                      <path d="M1 1l10 10M11 1L1 11" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
               <div className={styles.treeList}>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={list.map(d => d.id)} strategy={verticalListSortingStrategy}>
-                    {list.map(d => (
-                      <SortableNote
-                        key={d.id}
-                        doc={d}
-                        active={d.id === activeId}
-                        onSelect={selectNote}
-                        onDelete={deleteNote}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
+                {q ? (
+                  results.length === 0
+                    ? <div className={styles.treeEmpty}>No notes match “{query.trim()}”</div>
+                    : results.map(({ doc, snippet }) => (
+                        <NoteRow
+                          key={doc.id}
+                          doc={doc}
+                          active={doc.id === activeId}
+                          snippet={snippet}
+                          onSelect={selectNote}
+                          onDelete={deleteNote}
+                        />
+                      ))
+                ) : (
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={list.map(d => d.id)} strategy={verticalListSortingStrategy}>
+                      {list.map(d => (
+                        <SortableNote
+                          key={d.id}
+                          doc={d}
+                          active={d.id === activeId}
+                          onSelect={selectNote}
+                          onDelete={deleteNote}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                )}
               </div>
             </aside>
 

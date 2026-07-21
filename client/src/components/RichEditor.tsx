@@ -15,8 +15,9 @@ import styles from './NotesConsole.module.css';
 // Stable, non-hashed class so to-do markup embedded in saved note HTML keeps
 // working across builds (a CSS-module hash could change and orphan old notes).
 const TODO_CLASS = 'note-todo';
+const TABLE_CLASS = 'note-table';
 
-type BlockId  = 'text' | 'h1' | 'h2' | 'h3' | 'ul' | 'ol' | 'todo' | 'quote' | 'code' | 'hr';
+type BlockId  = 'text' | 'h1' | 'h2' | 'h3' | 'ul' | 'ol' | 'todo' | 'quote' | 'code' | 'hr' | 'table';
 type InlineId = 'bold' | 'italic' | 'underline' | 'strike' | 'inlinecode' | 'link' | 'clear';
 
 interface Cmd {
@@ -32,15 +33,16 @@ interface Cmd {
 
 const CMDS: Cmd[] = [
   { id: 'text',  kind: 'block', label: 'Text',        badge: '¶',  hint: 'Plain paragraph',      keys: ['text', 'p', 'plain', 'paragraph', 'body', 'normal'] },
-  { id: 'h1',    kind: 'block', label: 'Heading 1',   badge: 'H1', hint: 'Large section heading', keys: ['h1', 'heading1', '#', 'title'] },
-  { id: 'h2',    kind: 'block', label: 'Heading 2',   badge: 'H2', hint: 'Medium section heading', keys: ['h2', 'heading2', '##', 'subtitle', 'subheading'] },
-  { id: 'h3',    kind: 'block', label: 'Heading 3',   badge: 'H3', hint: 'Small section heading', keys: ['h3', 'heading3', '###'] },
-  { id: 'ul',    kind: 'block', label: 'Bullet list', badge: '•',  hint: 'Simple bulleted list',  keys: ['ul', 'bullet', 'list', 'unordered', '-', '*'] },
-  { id: 'ol',    kind: 'block', label: 'Numbered',    badge: '1.', hint: 'Numbered list',         keys: ['ol', 'number', 'numbered', 'ordered', '1.'] },
-  { id: 'todo',  kind: 'block', label: 'To-do',       badge: '☐',  hint: 'Trackable task item',   keys: ['todo', 'task', 'check', 'checkbox', 'checklist', '[]'] },
-  { id: 'quote', kind: 'block', label: 'Quote',       badge: '"',  hint: 'Capture a quote',       keys: ['quote', 'blockquote', 'cite', '>'] },
-  { id: 'code',  kind: 'block', label: 'Code block',  badge: '<>', hint: 'Monospace code block',  keys: ['code', 'codeblock', 'pre', 'snippet', '```'] },
-  { id: 'hr',    kind: 'block', label: 'Divider',     badge: '—',  hint: 'Horizontal rule',       keys: ['hr', 'divider', 'rule', 'line', 'separator', '---'] },
+  { id: 'h1',    kind: 'block', label: 'Heading 1',   badge: 'H1', hint: 'or type # + space',     keys: ['h1', 'heading1', '#', 'title'] },
+  { id: 'h2',    kind: 'block', label: 'Heading 2',   badge: 'H2', hint: 'or type ## + space',    keys: ['h2', 'heading2', '##', 'subtitle', 'subheading'] },
+  { id: 'h3',    kind: 'block', label: 'Heading 3',   badge: 'H3', hint: 'or type ### + space',   keys: ['h3', 'heading3', '###'] },
+  { id: 'ul',    kind: 'block', label: 'Bullet list', badge: '•',  hint: 'or type - + space',     keys: ['ul', 'bullet', 'list', 'unordered', '-', '*'] },
+  { id: 'ol',    kind: 'block', label: 'Numbered',    badge: '1.', hint: 'or type 1. + space',    keys: ['ol', 'number', 'numbered', 'ordered', '1.'] },
+  { id: 'todo',  kind: 'block', label: 'To-do',       badge: '☐',  hint: 'or type [] + space',    keys: ['todo', 'task', 'check', 'checkbox', 'checklist', '[]'] },
+  { id: 'quote', kind: 'block', label: 'Quote',       badge: '"',  hint: 'or type > + space',     keys: ['quote', 'blockquote', 'cite', '>'] },
+  { id: 'code',  kind: 'block', label: 'Code block',  badge: '<>', hint: 'or type ```',           keys: ['code', 'codeblock', 'pre', 'snippet', '```'] },
+  { id: 'table', kind: 'block', label: 'Table',       badge: '⊞',  hint: '3×3 — Tab moves cell',  keys: ['table', 'grid', 'tbl', 'rows', 'columns', '|'] },
+  { id: 'hr',    kind: 'block', label: 'Divider',     badge: '—',  hint: 'or type ---',           keys: ['hr', 'divider', 'rule', 'line', 'separator', '---'] },
 
   { id: 'bold',       kind: 'inline', label: 'Bold',          badge: 'B',  hint: 'Ctrl+B — **text**',  keys: ['bold', 'b', 'strong', '**'] },
   { id: 'italic',     kind: 'inline', label: 'Italic',        badge: 'I',  hint: 'Ctrl+I — *text*',    keys: ['italic', 'i', 'em', 'emphasis', '*', '_'] },
@@ -50,6 +52,126 @@ const CMDS: Cmd[] = [
   { id: 'link',       kind: 'inline', label: 'Link',          badge: '🔗', hint: 'Add a hyperlink',    keys: ['link', 'url', 'href', 'anchor', 'a', '[]()'] },
   { id: 'clear',      kind: 'inline', label: 'Clear format',  badge: 'Tx', hint: 'Strip formatting',   keys: ['clear', 'remove', 'unformat', 'reset', 'strip', 'plain'] },
 ];
+
+// Markdown typed at the start of a block turns it into that block, the way the
+// slash menu's aliases have always promised. The trailing space is part of the
+// trigger, so "1." on its own stays text; Chrome writes that space as a
+// non-breaking one, hence the alternative in each character class. Dividers and
+// code fences fire on their last character — there's no space to wait for.
+const MD_RULES: { re: RegExp; id: BlockId }[] = [
+  { re: /^#[ \u00a0]$/,            id: 'h1' },
+  { re: /^##[ \u00a0]$/,           id: 'h2' },
+  { re: /^###[ \u00a0]$/,          id: 'h3' },
+  { re: /^[-*+][ \u00a0]$/,        id: 'ul' },
+  { re: /^\d+[.)][ \u00a0]$/,      id: 'ol' },
+  { re: /^\[[ \u00a0xX]?\][ \u00a0]$/, id: 'todo' },
+  { re: /^>[ \u00a0]$/,            id: 'quote' },
+  { re: /^```$/,                   id: 'code' },
+  { re: /^(---|\*\*\*|___)$/,      id: 'hr' },
+];
+
+// ── List repair ───────────────────────────────────────────────────────
+// execCommand can leave a list holding raw text instead of <li> children —
+// typically after emptying a list and making a new one over the remains. Such
+// a list renders with no bullet or number at all and Enter inside it produces
+// sibling lists rather than items, which reads as "lists are broken". Notes
+// saved in that state stay broken until the markup is put right, so this runs
+// on load as well as after every command that touches a list.
+function normalizeLists(editor: HTMLElement) {
+  // Re-parenting an item drops the caret where it was rather than carrying it
+  // along, so the typing that follows an outdent would land in the wrong item.
+  // The nodes themselves survive the repair — only their parents change — so
+  // the caret can be put back exactly where the user left it.
+  const sel = window.getSelection();
+  const mark = sel && sel.rangeCount && editor.contains(sel.anchorNode)
+    ? { node: sel.anchorNode!, offset: sel.anchorOffset }
+    : null;
+
+  // 1. Anything inside a list that isn't an item or a sub-list becomes an item.
+  //    Consecutive strays group into one, so inline formatting stays together.
+  editor.querySelectorAll('ul, ol').forEach(list => {
+    let buffer: Node[] = [];
+    const flush = (before: Node | null) => {
+      if (!buffer.length) return;
+      const li = document.createElement('li');
+      buffer.forEach(n => li.appendChild(n));
+      list.insertBefore(li, before);
+      buffer = [];
+    };
+    Array.from(list.childNodes).forEach(node => {
+      const isStructural = node.nodeType === Node.ELEMENT_NODE &&
+        /^(LI|UL|OL)$/.test((node as HTMLElement).nodeName);
+      const isBlankText = node.nodeType === Node.TEXT_NODE && !(node.textContent ?? '').trim();
+      if (isStructural) { flush(node); return; }
+      if (isBlankText) { list.removeChild(node); return; }
+      buffer.push(node);
+    });
+    flush(null);
+  });
+
+  // 2. Outdenting lifts an item out of its sub-list but can leave it inside the
+  //    parent item; it belongs to the list, as the sibling that follows.
+  editor.querySelectorAll('li').forEach(li => {
+    let anchor: Element = li;
+    Array.from(li.children)
+      .filter(child => child.nodeName === 'LI')
+      .forEach(stray => { anchor.after(stray); anchor = stray; });
+  });
+
+  // 3. A list directly inside a list belongs to the item above it (the shape
+  //    browsers produce for Tab). With no item above, the outer list is just a
+  //    wrapper and goes away.
+  editor.querySelectorAll('ul, ol').forEach(list => {
+    const parent = list.parentElement;
+    if (!parent || !/^(UL|OL)$/.test(parent.nodeName)) return;
+    const prev = list.previousElementSibling;
+    if (prev && prev.nodeName === 'LI') prev.appendChild(list);
+  });
+  editor.querySelectorAll('ul, ol').forEach(list => {
+    const parent = list.parentElement;
+    if (!parent || !/^(UL|OL)$/.test(parent.nodeName)) return;
+    parent.replaceWith(...Array.from(parent.childNodes));
+  });
+
+  // 4. Lists split by the repairs above read as one list, so join neighbours
+  //    of the same kind, and drop anything left with no items at all.
+  editor.querySelectorAll('ul, ol').forEach(list => {
+    let next = list.nextElementSibling;
+    while (next && next.nodeName === list.nodeName) {
+      const after = next.nextElementSibling;
+      while (next.firstChild) list.appendChild(next.firstChild);
+      next.remove();
+      next = after;
+    }
+  });
+  editor.querySelectorAll('ul, ol').forEach(list => {
+    if (!list.querySelector('li')) list.remove();
+  });
+
+  if (mark && mark.node.isConnected && sel) {
+    const limit = mark.node.nodeType === Node.TEXT_NODE
+      ? (mark.node.textContent ?? '').length
+      : mark.node.childNodes.length;
+    const caret = document.createRange();
+    try {
+      caret.setStart(mark.node, Math.min(mark.offset, limit));
+      caret.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(caret);
+    } catch { /* the node was rewritten out from under us — leave the caret be */ }
+  }
+}
+
+// How far a block is indented by Tab. Lists nest natively; everything else
+// (paragraphs, headings, to-dos) steps through this attribute.
+const INDENT_ATTR = 'data-indent';
+const MAX_INDENT = 5;
+
+function indentBlock(block: HTMLElement, delta: 1 | -1) {
+  const next = Math.max(0, Math.min(MAX_INDENT, Number(block.getAttribute(INDENT_ATTR) ?? 0) + delta));
+  if (next === 0) block.removeAttribute(INDENT_ATTR);
+  else block.setAttribute(INDENT_ATTR, String(next));
+}
 
 // Match on the label and every alias, ignoring spaces and case, so "h2",
 // "heading2", "heading 2" and "##" all land on Heading 2.
@@ -87,10 +209,77 @@ const ClearIcon = () => icon(<>
 // A single clean rule. Faded marks above and below read as "=" at this size.
 const DividerIcon = () => icon(<path d="M3 12h18" />);
 
+const TableIcon = () => icon(<>
+  <rect x="3" y="4" width="18" height="16" rx="2" />
+  <path d="M3 10h18" /><path d="M9 10v10" /><path d="M15 10v10" />
+</>);
+
+const TrashIcon = () => icon(<>
+  <path d="M3 6h18" /><path d="M8 6V4h8v2" />
+  <path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" />
+</>);
+
 const LinkIcon = () => icon(<>
   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
 </>);
+
+// ── Tables ────────────────────────────────────────────────────────────
+// A table is ordinary <table class="note-table"> markup living inside the
+// editable surface: a header row plus body rows, every cell editable on its
+// own. The class is global (like .note-todo) so saved note HTML keeps its
+// styling across builds.
+function buildCell(tag: 'th' | 'td'): HTMLTableCellElement {
+  const cell = document.createElement(tag);
+  cell.appendChild(document.createElement('br'));
+  return cell;
+}
+
+function buildRow(cols: number, tag: 'th' | 'td'): HTMLTableRowElement {
+  const tr = document.createElement('tr');
+  for (let c = 0; c < cols; c++) tr.appendChild(buildCell(tag));
+  return tr;
+}
+
+function buildTable(bodyRows: number, cols: number): HTMLTableElement {
+  const table = document.createElement('table');
+  table.className = TABLE_CLASS;
+  const thead = document.createElement('thead');
+  thead.appendChild(buildRow(cols, 'th'));
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for (let r = 0; r < bodyRows; r++) tbody.appendChild(buildRow(cols, 'td'));
+  table.appendChild(tbody);
+  return table;
+}
+
+// The cell holding the caret, if the selection is inside one of our tables.
+function cellAtCaret(editor: HTMLElement): HTMLTableCellElement | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.anchorNode) return null;
+  const node = sel.anchorNode;
+  const el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+  const cell = el?.closest('th, td') as HTMLTableCellElement | null;
+  if (!cell || !editor.contains(cell)) return null;
+  return cell.closest(`table.${TABLE_CLASS}`) ? cell : null;
+}
+
+// Move the caret into a cell: after existing text (so Tab lands where you'd
+// keep typing), but *before* the filler <br> of an empty cell — after it would
+// leave the caret stranded on a phantom second line.
+function focusCell(cell: HTMLTableCellElement) {
+  placeCaret(cell, !(cell.textContent ?? '').trim());
+}
+
+function cellsOf(table: HTMLTableElement): HTMLTableCellElement[] {
+  return Array.from(table.querySelectorAll('th, td'));
+}
+
+// Column index is positional: every row in these tables has the same width
+// (no colspan is ever produced), so cellIndex is the column.
+function columnCount(table: HTMLTableElement): number {
+  return table.rows[0]?.cells.length ?? 0;
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -230,7 +419,7 @@ function currentLineEmpty(): boolean {
 // no text, and the placeholder would sit on top of them.
 function isBlank(el: HTMLElement): boolean {
   if ((el.textContent ?? '').trim()) return false;
-  return !el.querySelector(`hr, img, pre, blockquote, ul, ol, h1, h2, h3, .${TODO_CLASS}`);
+  return !el.querySelector(`hr, img, pre, blockquote, ul, ol, h1, h2, h3, table, .${TODO_CLASS}`);
 }
 
 export default function RichEditor({ initialHtml, onChange }: Props) {
@@ -241,6 +430,7 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
   const [slashIdx, setSlashIdx] = useState(0);
   const [menuPos, setMenuPos] = useState<MenuPos>({ left: 0, top: 0, bottom: null, maxHeight: 280 });
   const [marks, setMarks] = useState<Marks>(NO_MARKS);
+  const [inTable, setInTable] = useState(false);
   const [bubble, setBubble] = useState<BubblePos | null>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
 
@@ -272,7 +462,12 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
   useEffect(() => {
     const el = ref.current!;
     el.innerHTML = initialHtml && initialHtml.trim() ? initialHtml : '<p><br></p>';
+    // Notes written before the list markup was fixed open with their bullets
+    // and numbers missing; put them right on the way in.
+    const beforeRepair = el.innerHTML;
+    normalizeLists(el);
     el.classList.toggle('note-empty', isBlank(el));
+    if (el.innerHTML !== beforeRepair) onChange(el.innerHTML);   // persist the repair
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = slashQuery ? CMDS.filter(c => cmdMatches(c, slashQuery)) : CMDS;
@@ -346,6 +541,7 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
       const range = sel.getRangeAt(0);
       if (!el.contains(range.commonAncestorContainer)) return; // selection elsewhere on the page
       setMarks(readMarks());
+      setInTable(!!cellAtCaret(el));
       if (sel.isCollapsed || !sel.toString().trim()) { setBubble(null); return; }
       const r = range.getBoundingClientRect();
       if (!r || (!r.width && !r.height)) { setBubble(null); return; }
@@ -359,9 +555,45 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
   // The command menu and the bubble should never be up at the same time
   useEffect(() => { if (slashOpen) setBubble(null); }, [slashOpen]);
 
+  // Markdown shortcuts: when everything typed so far in the block is one of the
+  // MD_RULES triggers, swallow it and turn the block into what it describes.
+  // Returns true if it fired, so the caller skips the rest of the input pass.
+  function maybeAutoformat(): boolean {
+    const editor = ref.current!;
+    const sel = window.getSelection();
+    if (!sel || !sel.isCollapsed || !sel.anchorNode) return false;
+    if (cellAtCaret(editor)) return false;    // tables keep their cells literal
+
+    const block = getBlock(editor);
+    // Only plain paragraphs convert. Inside a list, code block, quote or to-do
+    // the marker characters are content the user meant to type.
+    if (!block || !/^(P|DIV)$/.test(block.nodeName)) return false;
+    if (block.classList.contains(TODO_CLASS)) return false;
+
+    const typed = document.createRange();
+    typed.selectNodeContents(block);
+    try { typed.setEnd(sel.anchorNode, sel.anchorOffset); } catch { return false; }
+    const before = typed.toString();
+
+    const rule = MD_RULES.find(r => r.re.test(before));
+    if (!rule) return false;
+
+    // Drop the marker text, then apply the block command to the empty line
+    typed.deleteContents();
+    const caret = document.createRange();
+    caret.setStart(typed.startContainer, typed.startOffset);
+    caret.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(caret);
+    applyBlock(rule.id);
+    return true;
+  }
+
   function handleInput() {
     const editor = ref.current!;
     const sel = window.getSelection();
+
+    if (!slashOpenRef.current && maybeAutoformat()) return;   // applyBlock emits
 
     if (slashOpenRef.current && slashInfo.current) {
       // Track the query typed after "/"
@@ -423,6 +655,136 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     if (!div.firstChild) div.appendChild(document.createElement('br'));
     block.replaceWith(div);
     placeCaret(div, true);
+  }
+
+  // ── Table commands ────────────────────────────────────────────────────
+  function insertTable() {
+    const editor = ref.current!;
+    const table = buildTable(2, 3);
+
+    const openCell = cellAtCaret(editor);
+    if (openCell) {
+      // Asking for a table from inside one adds it after, never nested within
+      openCell.closest(`table.${TABLE_CLASS}`)!.after(table);
+    } else {
+      const block = repairBlankBlock(editor) ?? getBlock(editor);
+      // Drop the table onto an empty paragraph rather than leaving a blank line
+      // above it; otherwise it goes after the current block.
+      if (block && isBlank(block)) block.replaceWith(table);
+      else if (block) block.after(table);
+      else editor.appendChild(table);
+    }
+
+    // Always leave somewhere to type after the table — a trailing table is
+    // otherwise impossible to escape with the caret.
+    if (!table.nextElementSibling) {
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      table.after(p);
+    }
+    const first = table.querySelector('th, td') as HTMLTableCellElement | null;
+    if (first) focusCell(first);
+    setInTable(true);
+  }
+
+  // Tab walks the cells in reading order; Tab out of the last cell grows the
+  // table by a row, the way a spreadsheet does.
+  function moveCell(delta: 1 | -1) {
+    const editor = ref.current!;
+    const cell = cellAtCaret(editor);
+    if (!cell) return;
+    const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
+    const cells = cellsOf(table);
+    const i = cells.indexOf(cell);
+    const next = cells[i + delta];
+    if (next) { focusCell(next); return; }
+    if (delta < 0) return; // at the very first cell — stay put
+    const tbody = table.tBodies[0] ?? table;
+    const row = buildRow(columnCount(table), 'td');
+    tbody.appendChild(row);
+    focusCell(row.cells[0]);
+    emit();
+  }
+
+  function addRow(after: boolean) {
+    const editor = ref.current!;
+    const cell = cellAtCaret(editor);
+    if (!cell) return;
+    const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
+    const tr = cell.parentElement as HTMLTableRowElement;
+    const row = buildRow(columnCount(table), 'td');
+    // A row can't be added above the header — it would become the new header
+    // row visually while still holding <td>s, so it lands below instead.
+    const inHead = tr.parentElement === table.tHead;
+    if (after || inHead) {
+      if (inHead) (table.tBodies[0] ?? table).prepend(row);
+      else tr.after(row);
+    } else tr.before(row);
+    focusCell(row.cells[0]);
+    emit();
+  }
+
+  function addColumn(after: boolean) {
+    const editor = ref.current!;
+    const cell = cellAtCaret(editor);
+    if (!cell) return;
+    const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
+    const at = cell.cellIndex + (after ? 1 : 0);
+    Array.from(table.rows).forEach(tr => {
+      const tag = tr.parentElement === table.tHead ? 'th' : 'td';
+      const fresh = buildCell(tag);
+      const ref_ = tr.cells[at];
+      if (ref_) tr.insertBefore(fresh, ref_);
+      else tr.appendChild(fresh);
+    });
+    focusCell(cell.parentElement!.children[at] as HTMLTableCellElement);
+    emit();
+  }
+
+  function deleteRow() {
+    const editor = ref.current!;
+    const cell = cellAtCaret(editor);
+    if (!cell) return;
+    const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
+    const tr = cell.parentElement as HTMLTableRowElement;
+    if (tr.parentElement === table.tHead) return; // the header row stays
+    const fallback = (tr.nextElementSibling ?? tr.previousElementSibling) as HTMLTableRowElement | null;
+    tr.remove();
+    if (fallback) focusCell(fallback.cells[0]);
+    else focusCell(table.rows[0].cells[0]);
+    emit();
+  }
+
+  function deleteColumn() {
+    const editor = ref.current!;
+    const cell = cellAtCaret(editor);
+    if (!cell) return;
+    const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
+    if (columnCount(table) <= 1) { deleteTable(); return; }
+    const at = cell.cellIndex;
+    Array.from(table.rows).forEach(tr => tr.cells[at]?.remove());
+    const row = table.rows[0];
+    focusCell(row.cells[Math.min(at, row.cells.length - 1)]);
+    emit();
+  }
+
+  function deleteTable() {
+    const editor = ref.current!;
+    const cell = cellAtCaret(editor);
+    if (!cell) return;
+    const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
+    let landing = table.nextElementSibling as HTMLElement | null;
+    if (!landing) {
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      table.after(p);
+      landing = p;
+    }
+    table.remove();
+    placeCaret(landing, true);
+    setInTable(false);
+    editor.focus();
+    emit();
   }
 
   function applyCmd(cmd: Cmd) {
@@ -492,23 +854,43 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
       case 'h3':    document.execCommand('formatBlock', false, '<H3>'); break;
       case 'ul':
       case 'ol': {
+        // Clear out any malformed list left over from earlier editing first —
+        // running the command over one is what produces text-in-a-list.
+        normalizeLists(editor);
+        // A to-do is a block in its own right: turning one into a list has to
+        // replace it, or the list ends up inside the to-do div and inherits its
+        // `list-style: none` — indented, but with no bullet in sight.
+        if (block?.classList.contains(TODO_CLASS)) {
+          const p = document.createElement('p');
+          while (block.firstChild) p.appendChild(block.firstChild);
+          if (!p.firstChild) p.appendChild(document.createElement('br'));
+          block.replaceWith(p);
+          placeCaret(p, false);
+        }
         document.execCommand(id === 'ul' ? 'insertUnorderedList' : 'insertOrderedList');
-        // Chrome leaves the new list nested inside the old <p>. That renders,
-        // but re-parsing the saved HTML hoists the list out and strands an
-        // empty paragraph — so unwrap it now.
+        // Chrome leaves the new list nested inside the block it replaced — a
+        // <p>, or the bare <div> it drops when you exit a previous list. That
+        // renders, but re-parsing the saved HTML hoists the list out and
+        // strands an empty block, so unwrap it now.
         const b = getBlock(editor);
-        if (b && b.nodeName === 'P' && b.children.length === 1 &&
+        if (b && /^(P|DIV)$/.test(b.nodeName) && !b.classList.contains(TODO_CLASS) &&
+            b.children.length === 1 &&
             /^(UL|OL)$/.test(b.firstElementChild!.nodeName)) {
           const list = b.firstElementChild as HTMLElement;
           b.replaceWith(list);
           const li = list.querySelector('li');
           if (li) placeCaret(li, false);
         }
+        // …and again afterwards: a browser that emits a list holding raw text
+        // instead of items would otherwise leave the note markerless until
+        // something else happened to trigger a repair.
+        normalizeLists(editor);
         break;
       }
       case 'quote': document.execCommand('formatBlock', false, '<BLOCKQUOTE>'); break;
       case 'code':  document.execCommand('formatBlock', false, '<PRE>'); break;
       case 'todo':  if (block) makeTodo(block); break;
+      case 'table': insertTable(); break;
       case 'hr': {
         document.execCommand('insertHorizontalRule');
         // Guarantee an editable paragraph after the rule
@@ -544,7 +926,34 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
     }
 
     const editor = ref.current!;
+
+    // Inside a table: Tab walks cells, Enter stays in the cell as a line break
+    // (the browser's default would split the cell into stray divs).
+    const cell = cellAtCaret(editor);
+    if (cell) {
+      if (e.key === 'Tab') { e.preventDefault(); moveCell(e.shiftKey ? -1 : 1); return; }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); emit(); return; }
+    }
+
     const block = getBlock(editor);
+
+    // Tab indents rather than walking focus out of the note. Lists nest for
+    // real (so numbering restarts on the sub-list); every other block steps
+    // through data-indent, and a code block takes a literal tab.
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (!block) return;
+      if (/^(UL|OL)$/.test(block.nodeName)) {
+        document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+        normalizeLists(editor);   // browsers nest the sub-list beside the item, not inside it
+      } else if (block.nodeName === 'PRE') {
+        document.execCommand('insertText', false, '\t');
+      } else {
+        indentBlock(block, e.shiftKey ? -1 : 1);
+      }
+      emit();
+      return;
+    }
 
     // To-do list behaviour: Enter continues the list; Enter on an empty item or
     // Backspace at its start exits back to a paragraph.
@@ -561,6 +970,9 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
           const nd = document.createElement('div');
           nd.className = TODO_CLASS;
           nd.setAttribute('data-checked', 'false');
+          // Carry the indent across, so a nested task list keeps its shape
+          const depth = block.getAttribute(INDENT_ATTR);
+          if (depth) nd.setAttribute(INDENT_ATTR, depth);
           nd.appendChild(document.createElement('br'));
           block.after(nd);
           placeCaret(nd, true);
@@ -650,8 +1062,25 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
         <span className={styles.tbSep} />
         <TBtn title="Quote"      onRun={() => applyBlock('quote')}><QuoteIcon /></TBtn>
         <TBtn title="Code block" onRun={() => applyBlock('code')}><CodeIcon /></TBtn>
+        <TBtn title="Table"      onRun={() => applyBlock('table')}><TableIcon /></TBtn>
         <span className={styles.tbSep} />
         {linkBtns}
+
+        {/* Row/column controls appear only while the caret is in a table. They
+            take a row of their own — spelled out they'd wrap raggedly into the
+            formatting buttons, and the caret can only ever be in one table. */}
+        {inTable && (
+          <div className={styles.tbTableRow}>
+            <span className={styles.tbGroupLabel}>Table</span>
+            <WordBtn title="Insert a row below this one"     onRun={() => addRow(true)}>Add row</WordBtn>
+            <WordBtn title="Insert a column to the right"    onRun={() => addColumn(true)}>Add column</WordBtn>
+            <WordBtn title="Delete the row the caret is in"  onRun={deleteRow} danger>Delete row</WordBtn>
+            <WordBtn title="Delete the column the caret is in" onRun={deleteColumn} danger>Delete column</WordBtn>
+            <WordBtn title="Remove the whole table" onRun={deleteTable} danger chip>
+              <TrashIcon />Delete table
+            </WordBtn>
+          </div>
+        )}
       </div>
 
       {/* ── Selection bubble ── */}
@@ -719,6 +1148,26 @@ export default function RichEditor({ initialHtml, onChange }: Props) {
       )}
     </div>
     </>
+  );
+}
+
+// Spelled-out toolbar action. Row and column commands are near-impossible to
+// tell apart as 14px glyphs, so the table group says what it does; `chip`
+// outlines the one action that throws work away wholesale.
+function WordBtn({ title, onRun, danger, chip, children }: {
+  title: string; onRun: () => void; danger?: boolean; chip?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`${styles.tbWordBtn} ${danger ? styles.tbWordBtnDanger : ''} ${chip ? styles.tbWordBtnChip : ''}`}
+      title={title}
+      aria-label={title}
+      onMouseDown={e => e.preventDefault()}
+      onClick={onRun}
+    >
+      {children}
+    </button>
   );
 }
 

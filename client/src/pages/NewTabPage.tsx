@@ -192,12 +192,21 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
   const [notesFading, setNotesFading] = useState(false);
   const notesFadingRef = useRef(false);
   notesFadingRef.current = notesFading;
+  // Set when notes are opened from a hit in the main search bar: which note to
+  // land on, and the term that found it (seeded into the console's own filter).
+  const [notesTarget, setNotesTarget] = useState<{ id: string; query: string } | null>(null);
 
   function closeNotes() {
     if (notesFadingRef.current) return;
     setNotesFading(true);
-    setTimeout(() => { setShowNotes(false); setNotesFading(false); }, 320);
+    setTimeout(() => { setShowNotes(false); setNotesFading(false); setNotesTarget(null); }, 320);
   }
+
+  // Stable identity: the search bar memoises its suggestions on this
+  const openNoteFromSearch = useCallback((id: string, query: string) => {
+    setNotesTarget({ id, query });
+    setShowNotes(true);
+  }, []);
 
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
@@ -526,6 +535,8 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
             bookmarks={Object.values(bookmarksByFolder).flat()}
             readingItems={readingList}
             feedArticles={feedArticles.map(a => ({ id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories }))}
+            notes={settings.noteDocs}
+            onOpenNote={openNoteFromSearch}
           />
         </div>
 
@@ -755,6 +766,8 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
           docs={settings.noteDocs ?? []}
           legacyNotes={settings.notes}
           onSave={noteDocs => updateSetting({ noteDocs })}
+          initialNoteId={notesTarget?.id}
+          initialQuery={notesTarget?.query}
           closing={notesFading}
           onClose={closeNotes}
         />

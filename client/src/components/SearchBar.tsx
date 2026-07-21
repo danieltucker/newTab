@@ -1,12 +1,13 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './SearchBar.module.css';
 import { faviconUrl } from '../utils/color';
+import { noteText, noteSnippet } from '../utils/noteText';
 
 // Rotating placeholder hints — cycled with a per-letter flip animation
 const HINTS = [
   'Search the web or enter an address',
   'Ask Claude anything with /c your question',
-  'Search your bookmarks, feeds and reading list — try #tag',
+  'Search your bookmarks, notes, feeds and reading list — try #tag',
   '/g Google · /d DuckDuckGo · /b Bing · /br Brave',
   'Paste a URL to go straight there',
 ];
@@ -58,7 +59,14 @@ function tagsOf(a: ArticleHint): string[] {
   return [...fromTag, ...(a.categories ?? [])];
 }
 
+interface NoteHint {
+  id: string;
+  title: string;
+  body: string;   // editor HTML — searched as plain text
+}
+
 type Suggestion =
+  | { kind: 'note';     id: string; title: string; snippet: string }
   | { kind: 'bookmark'; id: string; name: string; domain: string }
   | { kind: 'article';  id: string; title: string; source: string; url: string; matchedTag?: string }
   | { kind: 'search';   text: string; url: string }
@@ -71,6 +79,8 @@ interface Props {
   bookmarks?: BookmarkHint[];
   readingItems?: ArticleHint[];
   feedArticles?: ArticleHint[];
+  notes?: NoteHint[];
+  onOpenNote?: (id: string, query: string) => void;
 }
 
 export default function SearchBar({
@@ -79,6 +89,8 @@ export default function SearchBar({
   bookmarks = [],
   readingItems = [],
   feedArticles = [],
+  notes = [],
+  onOpenNote,
 }: Props) {
   const [value, setValue] = useState('');
   const [open, setOpen] = useState(false);
@@ -128,6 +140,25 @@ export default function SearchBar({
     const matchText = (a: ArticleHint) =>
       !tagOnly && (a.title.toLowerCase().includes(q) || a.source.toLowerCase().includes(q));
 
+    // Notes lead the list: they're the user's own writing, and unlike the rest
+    // of the results they can't be found anywhere else on the page.
+    if (!tagOnly && onOpenNote) {
+      for (const n of notes) {
+        if (results.filter(r => r.kind === 'note').length >= 3) break;
+        const text = noteText(n.body);
+        const at = text.toLowerCase().indexOf(q);
+        const inTitle = n.title.toLowerCase().includes(q);
+        if (at < 0 && !inTitle) continue;
+        results.push({
+          kind: 'note',
+          id: n.id,
+          title: n.title.trim() || 'Untitled',
+          // Body hits show their context; a title-only hit shows the opening line
+          snippet: noteSnippet(text, at >= 0 ? q : '', 70),
+        });
+      }
+    }
+
     if (!tagOnly) {
       bookmarks
         .filter(b => b.name.toLowerCase().includes(q) || b.domain.toLowerCase().includes(q))
@@ -155,7 +186,7 @@ export default function SearchBar({
     }
 
     return results;
-  }, [value, bookmarks, readingItems, feedArticles, searchEngine]);
+  }, [value, bookmarks, readingItems, feedArticles, notes, onOpenNote, searchEngine]);
 
   function navigate(url: string) {
     if (searchNewTab) {
@@ -169,7 +200,12 @@ export default function SearchBar({
   }
 
   function pick(item: Suggestion) {
-    if (item.kind === 'bookmark') {
+    if (item.kind === 'note') {
+      onOpenNote?.(item.id, value.trim());
+      setValue('');
+      setOpen(false);
+      setSelectedIndex(-1);
+    } else if (item.kind === 'bookmark') {
       navigate(`https://${item.domain}`);
     } else if (item.url) {
       navigate(item.url);
@@ -230,6 +266,14 @@ export default function SearchBar({
     </svg>
   );
 
+  const IconNote = () => (
+    <svg className={styles.resultSvg} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="M8 13h8"/><path d="M8 17h5"/>
+    </svg>
+  );
+
   const IconSearch = () => (
     <svg className={styles.resultSvg} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -280,6 +324,17 @@ export default function SearchBar({
         <div className={styles.dropdown}>
           {suggestions.map((item, i) => {
             const sel = i === selectedIndex;
+            if (item.kind === 'note') return (
+              <div key={item.id} className={`${styles.result} ${sel ? styles.resultSel : ''}`}
+                onMouseDown={() => handleMouseDown(item)} onMouseEnter={() => setSelectedIndex(i)}>
+                <div className={styles.resultIconWrap}><IconNote /></div>
+                <div className={styles.resultText}>
+                  <span className={styles.resultLabel}>{item.title}</span>
+                  {item.snippet && <span className={styles.resultSub}>{item.snippet}</span>}
+                </div>
+                <span className={styles.badge}>Note</span>
+              </div>
+            );
             if (item.kind === 'bookmark') return (
               <div key={item.id} className={`${styles.result} ${sel ? styles.resultSel : ''}`}
                 onMouseDown={() => handleMouseDown(item)} onMouseEnter={() => setSelectedIndex(i)}>
