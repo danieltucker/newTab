@@ -27,6 +27,7 @@ model User {
   refreshTokens RefreshToken[]
   dismissedFeedItems DismissedFeedItem[]
   readFeedItems      ReadFeedItem[]
+  comments           Comment[]
 }
 
 model RefreshToken {
@@ -66,7 +67,18 @@ model Feed {
   fetchUrl      String
   title         String     @default("")
   lastCheckedAt DateTime?
+  // Conditional-GET validators from the last successful fetch. Sent back as
+  // If-None-Match / If-Modified-Since so an unchanged feed answers 304 with no
+  // body and no re-upsert.
+  etag          String?
+  lastModified  String?
+  // Last time a user actually requested this feed (opened its folder, checked a
+  // bookmark). The background scheduler only refreshes feeds demanded recently,
+  // so feeds nobody looks at go dormant and stop costing outbound requests.
+  lastRequestedAt DateTime?
   items         FeedItem[]
+
+  @@index([lastCheckedAt])
 }
 
 model FeedItem {
@@ -74,11 +86,17 @@ model FeedItem {
   feedId     String
   feed       Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
   link       String
+  // Canonical form of link — lets an article be found from any URL spelling,
+  // the same key comments are threaded on
+  linkKey    String?
   title      String
   pubDate    DateTime?
   fetchedAt  DateTime  @default(now())
   readTime   Int?
   snippet    String?
+  // Full article HTML from the feed, sanitized on write. Backfills on the next
+  // refresh for items stored before this column existed.
+  content    String?
   imageUrl   String?
   categories String[]  @default([])
   dismissals DismissedFeedItem[]
@@ -86,6 +104,7 @@ model FeedItem {
 
   @@unique([feedId, link])
   @@index([feedId])
+  @@index([linkKey])
 }
 
 // Per-user, per-folder state on shared items (dismissed / saved-away)
@@ -135,6 +154,31 @@ model Bookmark {
 
   @@index([userId])
   @@index([folderId])
+}
+
+// Comments attach to an article by its canonical URL key, so the same thread
+// shows whether the article lives in the reading list or the RSS feed. Threaded
+// via parentId; only root comments (parentId == null) may set a title.
+// isPublic comments are visible to every user; private ones only to the author.
+model Comment {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articleKey   String    // canonical URL key — the join across reading list + feed
+  articleUrl   String    // original URL, kept for reference/linking
+  articleTitle String    @default("")
+  parentId     String?
+  parent       Comment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      Comment[] @relation("CommentThread")
+  title        String?   // root comments only
+  body         String    // sanitized HTML from the rich editor
+  isPublic     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([articleKey])
+  @@index([userId])
+  @@index([parentId])
 }
 
 model ReadingListItem {

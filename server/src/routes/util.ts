@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import nodeFetch from 'node-fetch';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { requireAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
 import { isSafeUrl, makeSafeAgent } from '../lib/isSafeUrl';
 
 const execFileAsync = promisify(execFile);
@@ -75,17 +75,11 @@ router.get('/color', (req: Request, res: Response): void => {
   res.json({ color: deriveColor(domain as string) });
 });
 
-router.get('/ip', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const r = await nodeFetch('https://ipinfo.io/json', { timeout: 5000 } as FetchOptions);
-    const data = await r.json() as { ip: string; city?: string; region?: string; country?: string; org?: string };
-    res.json({ ip: data.ip, city: data.city, region: data.region, country: data.country, org: data.org });
-  } catch {
-    res.status(502).json({ error: 'Could not reach ipinfo.io' });
-  }
-});
-
-router.get('/ping', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+// ping/tracert spawn a process and probe from the server's network position, so
+// they're admin-only (on top of the CONSOLE_ENABLED kill switch). The `ip`
+// command that used to live here now runs in the browser — it needs the
+// caller's public IP, not the server's.
+router.get('/ping', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   if (process.env.CONSOLE_ENABLED === 'false') {
     res.status(403).json({ error: 'Console features are disabled on this server' }); return;
   }
@@ -103,7 +97,7 @@ router.get('/ping', requireAuth, async (req: AuthRequest, res: Response): Promis
   }
 });
 
-router.get('/tracert', requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/tracert', requireAuth, requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   if (process.env.CONSOLE_ENABLED === 'false') {
     res.status(403).json({ error: 'Console features are disabled on this server' }); return;
   }

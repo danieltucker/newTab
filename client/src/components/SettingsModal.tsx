@@ -458,6 +458,71 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport, i
                 </div>
 
                 <div className={styles.sectionBlock}>
+                  <div className={styles.blockTitle}>Comments</div>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Show public comments</div>
+                      <div className={styles.rowHint}>
+                        Include comments other people have made public in your article threads.
+                        Turn this off to see only your own private comments.
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={settings.commentsShowPublic !== false}
+                      onChange={v => onUpdate({ commentsShowPublic: v })}
+                    />
+                  </div>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>New comments are public</div>
+                      <div className={styles.rowHint}>
+                        Start each new comment as public so anyone using this app can read it.
+                        You can always flip a single comment before posting it.
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={settings.commentsDefaultPublic === true}
+                      onChange={v => onUpdate({ commentsDefaultPublic: v })}
+                    />
+                  </div>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Open threads automatically</div>
+                      <div className={styles.rowHint}>
+                        Expand the comment thread on every article instead of waiting for a click.
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={settings.commentsAutoExpand === true}
+                      onChange={v => onUpdate({ commentsAutoExpand: v })}
+                    />
+                  </div>
+                  <div className={styles.openModeList}>
+                    {([
+                      { value: 'newest', label: 'Newest first', hint: 'Most recent conversations lead the thread' },
+                      { value: 'oldest', label: 'Oldest first',  hint: 'Reads in the order the conversation happened' },
+                    ] as const).map(opt => {
+                      const active = (settings.commentsSort ?? 'newest') === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          className={`${styles.openModeOption} ${active ? styles.openModeSelected : ''}`}
+                          onClick={() => onUpdate({ commentsSort: opt.value })}
+                        >
+                          <div className={styles.openModeRadio}>
+                            <span className={active ? styles.radioFilled : styles.radioEmpty} />
+                          </div>
+                          <div>
+                            <div className={styles.openModeLabel}>{opt.label}</div>
+                            <div className={styles.rowHint}>{opt.hint}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
                   <div className={styles.blockTitle}>Saving articles</div>
                   <div className={styles.openModeList}>
                     {([

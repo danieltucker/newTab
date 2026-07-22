@@ -24,6 +24,11 @@ export interface UserSettings {
   rssEnabled?: boolean;
   saveArticleMode?: 'dialog' | 'instant';
   markReadOnScroll?: boolean;
+  // Comments — shared threads hanging off an article's canonical URL
+  commentsShowPublic?: boolean;      // see other people's public comments
+  commentsDefaultPublic?: boolean;   // new comments start public
+  commentsSort?: 'newest' | 'oldest';
+  commentsAutoExpand?: boolean;      // open the thread without clicking
   activeWidgets: string[];
   worldClockZones: Array<{ city: string; zone: string }>;
   rssFeedUrls: string[];
@@ -48,6 +53,12 @@ const DEFAULTS: UserSettings = {
   rssEnabled: true,
   saveArticleMode: 'dialog',
   markReadOnScroll: true,
+  // Public by default would publish existing private thoughts the moment
+  // someone starts commenting — opt in instead.
+  commentsShowPublic: true,
+  commentsDefaultPublic: false,
+  commentsSort: 'newest',
+  commentsAutoExpand: false,
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],
@@ -72,7 +83,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll']);
+  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll', 'commentsShowPublic', 'commentsDefaultPublic', 'commentsSort', 'commentsAutoExpand']);
   const incoming = req.body as Record<string, unknown>;
 
   // Validate keys

@@ -1,6 +1,51 @@
 import nodeFetch from 'node-fetch';
+import sanitizeHtml from 'sanitize-html';
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
+
+// Feed bodies are third-party HTML rendered straight into the reader, so they
+// get a tighter allowlist than user comments: no forms, no media embeds, no
+// inline styles, and images only over https (an http image would downgrade the
+// page and leak the reader's IP to the publisher over plaintext).
+const MAX_CONTENT_CHARS = 120_000;
+
+export function sanitizeFeedHtml(raw: string): string | null {
+  const html = cleanContent(raw);
+  if (!html.trim()) return null;
+  const clean = sanitizeHtml(html, {
+    allowedTags: [
+      'p', 'br', 'hr', 'div', 'span', 'section', 'article',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+      'blockquote', 'pre', 'code', 'kbd', 'samp',
+      'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'ins', 'mark',
+      'sub', 'sup', 'small', 'abbr', 'cite', 'q',
+      'a', 'img', 'figure', 'figcaption', 'picture', 'source',
+      'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
+    ],
+    allowedAttributes: {
+      // rel/target and loading/referrerpolicy must be allowed here or the
+      // transformTags below are silently stripped back off
+      a: ['href', 'title', 'rel', 'target'],
+      img: ['src', 'alt', 'title', 'width', 'height', 'srcset', 'sizes', 'loading', 'referrerpolicy'],
+      source: ['srcset', 'sizes', 'type'],
+      td: ['colspan', 'rowspan'],
+      th: ['colspan', 'rowspan', 'scope'],
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    allowedSchemesByTag: { img: ['https'] },
+    transformTags: {
+      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer nofollow', target: '_blank' }),
+      img: sanitizeHtml.simpleTransform('img', { loading: 'lazy', referrerpolicy: 'no-referrer' }),
+    },
+    nonTextTags: ['style', 'script', 'textarea', 'option', 'noscript', 'iframe', 'form', 'button'],
+    // Drop <img> whose src was stripped for being http/data — a broken icon is
+    // worse than no image
+    exclusiveFilter: frame => frame.tag === 'img' && !frame.attribs?.src,
+  }).trim();
+  if (!clean) return null;
+  return clean.length > MAX_CONTENT_CHARS ? clean.slice(0, MAX_CONTENT_CHARS) : clean;
+}
 
 // ── RSS / Atom parser ──────────────────────────────────────────────────────
 
@@ -21,6 +66,7 @@ export interface FeedItem {
   date: Date | null;
   readTime: number | null;
   snippet: string | null;
+  content: string | null;
   imageUrl: string | null;
   categories: string[];
 }
@@ -92,9 +138,12 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
     const e = m[1];
     const rawTitle = e.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '';
     const title = cleanContent(rawTitle);
-    const link = isAtom
+    // Entity-decoded: feeds write query separators as &amp;, which would
+    // otherwise be stored literally and turn "?a=1&b=2" into a bogus "amp;b"
+    // param on every outbound link
+    const link = decodeXmlEntities(isAtom
       ? (e.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] ?? e.match(/<link>([^<]+)<\/link>/i)?.[1] ?? '')
-      : (e.match(/<link[^>]*>([^<]+)<\/link>/i)?.[1] ?? '');
+      : (e.match(/<link[^>]*>([^<]+)<\/link>/i)?.[1] ?? ''));
     const rawDate = isAtom
       ? (e.match(/<updated>([\s\S]*?)<\/updated>/i)?.[1] ?? e.match(/<published>([\s\S]*?)<\/published>/i)?.[1])
       : (e.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] ?? e.match(/<dc:date>([\s\S]*?)<\/dc:date>/i)?.[1]);
@@ -107,6 +156,7 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
       ?? '';
     const readTime = estimateReadTime(contentRaw);
     const snippet = extractSnippet(contentRaw);
+    const content = sanitizeFeedHtml(contentRaw);
     const imageUrl = extractImage(e, contentRaw);
 
     // Categories
@@ -132,7 +182,7 @@ export function parseFeed(xml: string, limit = 100): FeedItem[] {
       items.push({
         title, link: link.trim(),
         date: date && !isNaN(date.getTime()) ? date : null,
-        readTime, snippet, imageUrl,
+        readTime, snippet, content, imageUrl,
         categories: categories.slice(0, 5),
       });
     }

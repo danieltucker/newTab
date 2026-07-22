@@ -15,6 +15,9 @@ import totpRoutes from './routes/totp';
 import widgetRoutes from './routes/widgets';
 import adminRoutes from './routes/admin';
 import accountRoutes from './routes/account';
+import commentRoutes from './routes/comments';
+import articleRoutes from './routes/articles';
+import { startFeedScheduler, stopFeedScheduler } from './lib/feedScheduler';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,15 +68,22 @@ app.use('/api/v1/totp', apiLimiter, totpRoutes);
 app.use('/api/v1/widgets', apiLimiter, widgetRoutes);
 app.use('/api/v1/admin', apiLimiter, adminRoutes);
 app.use('/api/v1/account', apiLimiter, accountRoutes);
+app.use('/api/v1/comments', apiLimiter, commentRoutes);
+app.use('/api/v1/articles', apiLimiter, articleRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 const server = app.listen(PORT, () => {
   logger.info(`Server running on http://localhost:${PORT}`);
+  // Background feed refresher — keeps demanded feeds fresh without tying the
+  // work to any user request. Disable with FEED_SCHEDULER=false (e.g. when
+  // running multiple instances and only one should poll).
+  if (process.env.FEED_SCHEDULER !== 'false') startFeedScheduler();
 });
 
 function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down gracefully');
+  stopFeedScheduler();
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);

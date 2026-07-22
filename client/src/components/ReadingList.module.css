@@ -152,6 +152,33 @@
   color: var(--accent);
 }
 
+/* ── "You have N minutes saved" nudge, sitting on top of the list ── */
+.timeBanner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 9px 13px;
+  border: 1px solid var(--border);
+  border-left: 2px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.timeIcon {
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.timeAmount {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* ── Archive section ── */
 .archivedSection {
   margin-top: 20px;
@@ -275,8 +302,16 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 8px 16px 12px;
+  padding: 8px 16px 4px;
   margin-top: auto;
+}
+
+/* Comment strip, separated from the card meta by a hairline */
+.commentRow {
+  display: flex;
+  margin: 4px 16px 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 /* ── Window-style controls — a cluster of grey buttons pinned to the card's

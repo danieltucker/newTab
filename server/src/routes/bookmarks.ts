@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { isSafeUrl } from '../lib/isSafeUrl';
 import { canonicalFeedKey } from '../lib/feedUtils';
+import { ensureFeeds, refreshStaleFeeds } from '../lib/feedRefresh';
 import logger from '../lib/logger';
 
 type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
@@ -44,21 +45,6 @@ function isFeedXml(text: string): boolean {
   const t = text.trimStart();
   return (t.startsWith('<?xml') || t.startsWith('<rss') || t.startsWith('<feed')) &&
     (text.includes('<item') || text.includes('<entry') || text.includes('<channel'));
-}
-
-function parseFeedDates(xml: string): Date[] {
-  const dates: Date[] = [];
-  const isAtom = xml.includes('<feed') && (xml.includes('<entry>') || xml.includes('<entry '));
-  const itemRe = isAtom ? /<entry[\s>]([\s\S]*?)<\/entry>/gi : /<item[\s>]([\s\S]*?)<\/item>/gi;
-  let m;
-  while ((m = itemRe.exec(xml)) !== null) {
-    const e = m[1];
-    const raw = isAtom
-      ? (e.match(/<updated>([\s\S]*?)<\/updated>/i)?.[1] ?? e.match(/<published>([\s\S]*?)<\/published>/i)?.[1])
-      : (e.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] ?? e.match(/<dc:date>([\s\S]*?)<\/dc:date>/i)?.[1]);
-    if (raw) { const d = new Date(raw.trim()); if (!isNaN(d.getTime())) dates.push(d); }
-  }
-  return dates;
 }
 
 async function discoverFeed(domain: string): Promise<string | null> {
@@ -231,6 +217,10 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
   res.json({ ok: true });
 });
 
+// Updates a bookmark's unread badge. The feed itself is fetched through the
+// shared Feed table, so two users watching the same site (or a site that's also
+// a folder feed) trigger at most one outbound request — the per-bookmark fetch
+// this used to do is gone.
 router.post('/:id/check-feed', async (req: AuthRequest, res: Response): Promise<void> => {
   const bookmark = await prisma.bookmark.findFirst({ where: { id: req.params.id, userId: req.userId! } });
   if (!bookmark) { res.status(404).json({ error: 'Not found' }); return; }
@@ -238,32 +228,51 @@ router.post('/:id/check-feed', async (req: AuthRequest, res: Response): Promise<
   let feedUrl = bookmark.feedUrl ?? null;
   if (!feedUrl) feedUrl = await discoverFeed(bookmark.domain);
 
-  let feedLatestAt: Date | undefined;
-  let unreadDelta = 0;
+  if (!feedUrl) {
+    // No feed — just record the check so we don't re-run discovery every cycle.
+    const updated = await prisma.bookmark.update({
+      where: { id: bookmark.id },
+      data: { feedCheckedAt: new Date() },
+    });
+    res.json(updated);
+    return;
+  }
 
-  if (feedUrl) {
-    const xml = await fetchXml(feedUrl);
-    if (xml && isFeedXml(xml)) {
-      const dates = parseFeedDates(xml);
-      if (dates.length > 0) {
-        feedLatestAt = new Date(Math.max(...dates.map(d => d.getTime())));
-        const since = bookmark.feedLatestAt
-          ? new Date(bookmark.feedLatestAt)
-          : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // first check: articles from last 7 days
-        unreadDelta = dates.filter(d => d > since).length;
-      }
-    } else {
-      feedUrl = null;
-    }
+  // Resolve to the shared Feed row and make sure it has items. First time we
+  // wait so the badge is meaningful; otherwise refresh in the background — both
+  // paths are claim-protected, so concurrent callers don't duplicate the fetch.
+  const [feed] = await ensureFeeds([feedUrl]);
+  if (feed) {
+    if (!feed.lastCheckedAt) await refreshStaleFeeds([feed]);
+    else refreshStaleFeeds([feed]).catch(() => {});
+  }
+
+  // Unread = shared items published since the user last opened this site (or a
+  // 7-day baseline on first check). Idempotent — re-checking never double-counts,
+  // and POST /visited zeroes it by advancing lastVisitedAt.
+  const since = bookmark.lastVisitedAt
+    ? new Date(bookmark.lastVisitedAt)
+    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  let unreadCount = 0;
+  let feedLatestAt: Date | undefined;
+  if (feed) {
+    unreadCount = await prisma.feedItem.count({ where: { feedId: feed.id, pubDate: { gt: since } } });
+    const latest = await prisma.feedItem.findFirst({
+      where: { feedId: feed.id },
+      orderBy: { pubDate: 'desc' },
+      select: { pubDate: true },
+    });
+    feedLatestAt = latest?.pubDate ?? undefined;
   }
 
   const updated = await prisma.bookmark.update({
-    where: { id: req.params.id },
+    where: { id: bookmark.id },
     data: {
       feedUrl,
       feedCheckedAt: new Date(),
+      unreadCount: Math.min(unreadCount, 100),
       ...(feedLatestAt && { feedLatestAt }),
-      ...(unreadDelta > 0 && { unreadCount: Math.min(bookmark.unreadCount + unreadDelta, 100) }),
     },
   });
   res.json(updated);

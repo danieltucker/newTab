@@ -25,6 +25,7 @@ declare const __APP_VERSION__: string;
 interface Ctx {
   folders: Folder[];
   theme: 'dark' | 'light';
+  isAdmin: boolean;
   onSelectFolder: (id: string) => void;
   onSetTheme: (t: 'dark' | 'light' | 'auto') => void;
   onRefreshFeeds: () => void;
@@ -37,10 +38,13 @@ type CmdFn = (args: string[], ctx: Ctx) => Promise<string | string[]> | string |
 // desc — one-liner for `help` and the suggestion dropdown.
 // usage/help — shown by `help <command>`: usage is the signature, help is the
 // detail block (parameters, notes, examples).
+// admin — command runs server work from the server's own network position
+// (feed fan-out, process spawn), so it's hidden from and denied to non-admins.
 interface Command {
   desc: string;
   usage?: string;
   help?: string[];
+  admin?: boolean;
   run: CmdFn;
 }
 
@@ -60,11 +64,11 @@ const COMMANDS: Record<string, Command> = {
       '  help ping',
       '  help add',
     ],
-    run: (args) => {
+    run: (args, { isAdmin }) => {
       const topic = args[0]?.toLowerCase();
       if (topic) {
         const def = COMMANDS[topic];
-        if (!def) return `No such command: "${topic}". Type "help" for the full list.`;
+        if (!def || (def.admin && !isAdmin)) return `No such command: "${topic}". Type "help" for the full list.`;
         const out = [def.usage ? `Usage: ${def.usage}` : topic, '', def.desc];
         if (def.help) out.push('', ...def.help);
         return out;
@@ -72,11 +76,13 @@ const COMMANDS: Record<string, Command> = {
       return [
         'Network',
         col('ip',        'Your public IP address and location'),
-        col('ping',      'ping <host>  — ICMP ping (4 packets)'),
-        col('tracert',   'tracert <host>  — Trace route to host'),
         col('dns',       'dns <host> [A|AAAA|MX|TXT]  — DNS lookup'),
         col('speedtest', 'Latency, download & upload test'),
-        col('refresh',   'Force-refresh all RSS feeds'),
+        ...(isAdmin ? [
+          col('ping',    'ping <host>  — ICMP ping (4 packets)'),
+          col('tracert', 'tracert <host>  — Trace route to host'),
+          col('refresh', 'Force-refresh all RSS feeds'),
+        ] : []),
         '',
         'Sites & folders',
         col('add',       'add site <domain> …  ·  add folder <name> …'),
@@ -135,9 +141,15 @@ const COMMANDS: Record<string, Command> = {
 
   ip: {
     desc: 'Show your public IP',
-    help: ['Shows your public IP address with its city/region/country and ISP,', 'as seen by the server.'],
+    help: [
+      'Shows your public IP address with its city/region/country and ISP.',
+      'Looked up directly from your browser, so it reflects THIS device and',
+      'connection — handy for allow-lists. (The server never sees this request.)',
+    ],
     run: async () => {
-      const res = await apiFetch('/api/v1/util/ip');
+      // Query the IP echo service from the browser so we get the user's own
+      // public IP, not the server's egress address.
+      const res = await fetch('https://ipinfo.io/json', { cache: 'no-store' });
       if (!res.ok) return 'Could not fetch IP info.';
       const d = await res.json() as { ip: string; city?: string; region?: string; country?: string; org?: string };
       const loc = [d.city, d.region, d.country].filter(Boolean).join(', ');
@@ -151,6 +163,7 @@ const COMMANDS: Record<string, Command> = {
   ping: {
     desc: 'Ping a host',
     usage: 'ping <host>',
+    admin: true,
     help: [
       'Sends 4 ICMP echo requests from the server to a host and reports the',
       'round-trip times.',
@@ -171,6 +184,7 @@ const COMMANDS: Record<string, Command> = {
   tracert: {
     desc: 'Trace route to a host',
     usage: 'tracert <host>',
+    admin: true,
     help: [
       'Traces the network path from the server to a host, listing each hop',
       'and its latency. Can take up to ~30s on long routes.',
@@ -220,6 +234,7 @@ const COMMANDS: Record<string, Command> = {
 
   refresh: {
     desc: 'Force-refresh all RSS feeds',
+    admin: true,
     help: ['Re-fetches every folder that has RSS feeds configured, right now,', 'instead of waiting for the periodic refresh. Takes no arguments.'],
     run: async (_args, { folders, onRefreshFeeds }) => {
       const feedFolders = folders.filter(f => f.feedUrls && f.feedUrls.length > 0);
@@ -344,6 +359,7 @@ const CMD_NAMES = Object.keys(COMMANDS);
 interface Props {
   folders: Folder[];
   theme: 'dark' | 'light';
+  isAdmin: boolean;
   onSelectFolder: (id: string) => void;
   onCreateFolder: (name: string, color: string) => Promise<void>;
   onSetTheme: (t: 'dark' | 'light' | 'auto') => void;
@@ -357,7 +373,7 @@ let lineId = 0;
 let persistedLines: Line[] = [{ id: lineId++, kind: 'info', text: 'Type "help" for available commands.' }];
 let persistedHistory: string[] = [];
 
-export default function Console({ folders, theme, onSelectFolder, onCreateFolder, onSetTheme, onRefreshFeeds, onAddSite, closing = false, onClose }: Props) {
+export default function Console({ folders, theme, isAdmin, onSelectFolder, onCreateFolder, onSetTheme, onRefreshFeeds, onAddSite, closing = false, onClose }: Props) {
   const [lines, setLines] = useState<Line[]>(persistedLines);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>(persistedHistory);
@@ -371,7 +387,7 @@ export default function Console({ folders, theme, onSelectFolder, onCreateFolder
   // Only match on the first token and only when no space yet (still typing the command)
   const firstToken = input.split(/\s/)[0].toLowerCase();
   const suggestions = !pending && firstToken && !input.includes(' ')
-    ? CMD_NAMES.filter(c => c.startsWith(firstToken) && c !== firstToken)
+    ? CMD_NAMES.filter(c => c.startsWith(firstToken) && c !== firstToken && (!COMMANDS[c].admin || isAdmin))
     : [];
 
   // Focus lands when the open animation finishes (see shell onAnimationEnd) so
@@ -549,8 +565,10 @@ export default function Console({ folders, theme, onSelectFolder, onCreateFolder
     const [cmd, ...args] = trimmed.split(/\s+/);
     const key = cmd.toLowerCase();
     const def = COMMANDS[key];
-    if (!def) {
-      const hint = CMD_NAMES.find(c => c.startsWith(key[0]));
+    // Admin-only commands are treated as non-existent for everyone else, so the
+    // console doesn't advertise capabilities the server would reject anyway.
+    if (!def || (def.admin && !isAdmin)) {
+      const hint = CMD_NAMES.find(c => c.startsWith(key[0]) && (!COMMANDS[c].admin || isAdmin));
       push(`Command not found: "${cmd}".${hint ? ` Did you mean "${hint}"?` : ' Type "help".'}`, 'error');
       return;
     }
@@ -558,7 +576,7 @@ export default function Console({ folders, theme, onSelectFolder, onCreateFolder
 
     setRunning(true);
     try {
-      const result = await def.run(args, { folders, theme, onSelectFolder, onSetTheme, onRefreshFeeds, push });
+      const result = await def.run(args, { folders, theme, isAdmin, onSelectFolder, onSetTheme, onRefreshFeeds, push });
       if (result === '__CLEAR__') {
         persistedLines = [];
         setLines([]);

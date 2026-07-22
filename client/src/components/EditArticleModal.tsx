@@ -5,7 +5,7 @@ import TagChipInput from './TagChipInput';
 
 interface Props {
   item: ReadingListItem;
-  onSave: (id: string, patch: Pick<ReadingListItem, 'title' | 'tag' | 'notes'>) => Promise<void>;
+  onSave: (id: string, patch: Partial<Pick<ReadingListItem, 'title' | 'tag' | 'notes'>>) => Promise<void>;
   onClose: () => void;
 }
 
@@ -17,14 +17,12 @@ export default function EditArticleModal({ item, onSave, onClose }: Props) {
   const [title, setTitle] = useState(item.title);
   const [tags, setTags] = useState<string[]>(parseTags(item.tag));
   const [tagInput, setTagInput] = useState('');
-  const [notes, setNotes] = useState(item.notes);
   const [saving, setSaving] = useState(false);
 
   // Sync if item changes
   useEffect(() => {
     setTitle(item.title);
     setTags(parseTags(item.tag));
-    setNotes(item.notes);
   }, [item.id]);
 
   async function handleSave() {
@@ -33,10 +31,11 @@ export default function EditArticleModal({ item, onSave, onClose }: Props) {
       : tags;
     setSaving(true);
     try {
+      // notes is left out entirely so the server keeps whatever is stored —
+      // comments own that content now
       await onSave(item.id, {
         title: title.trim() || item.title,
         tag: finalTags.join(','),
-        notes: notes.trim(),
       });
       onClose();
     } finally {
@@ -81,16 +80,8 @@ export default function EditArticleModal({ item, onSave, onClose }: Props) {
           />
         </div>
 
-        <div className={styles.field}>
-          <label className={styles.label}>Notes</label>
-          <textarea
-            className={styles.textarea}
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Any thoughts, highlights, or context…"
-            rows={4}
-          />
-        </div>
+        {/* Notes became comments — write them on the card's comment thread,
+            where they can be threaded, titled and optionally shared. */}
 
         <div className={styles.footer}>
           <button className={styles.cancelBtn} onClick={onClose}>Cancel</button>

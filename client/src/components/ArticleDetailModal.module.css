@@ -1,0 +1,402 @@
+/* Article reader — a large, quiet reading surface. The chrome stays minimal so
+   the article and its conversation carry the page. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(940px, 100%);
+  height: min(92vh, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 30px 80px var(--shadow);
+  animation: slideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(14px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop, .modal { animation: none; }
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface2) 60%, var(--surface));
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.toolbarFavicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.toolbarSource {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Shared shape for toolbar buttons, including caller-supplied ones */
+.toolbarRight :global(button),
+.openBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.toolbarRight :global(button):hover,
+.openBtn:hover {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+.closeBtn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.closeBtn:hover {
+  color: #e5484d;
+  border-color: color-mix(in oklab, #e5484d 45%, transparent);
+}
+
+/* ── Scroll body ──────────────────────────────────────────────────────── */
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted) 40%, transparent) transparent;
+}
+
+.scroll::-webkit-scrollbar { width: 10px; }
+.scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted) 35%, transparent);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.article {
+  padding: 24px 40px 8px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.hero {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 18px;
+}
+
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.cat {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.title {
+  margin: 0 0 10px;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.metaDot { opacity: 0.5; }
+
+/* ── Article prose ────────────────────────────────────────────────────── */
+
+.prose {
+  padding-top: 20px;
+  font-size: 16px;
+  line-height: 1.72;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.prose > * { margin: 0 0 16px; }
+.prose > *:last-child { margin-bottom: 0; }
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 28px 0 10px;
+  color: var(--text);
+}
+
+.prose h1 { font-size: 24px; }
+.prose h2 { font-size: 21px; }
+.prose h3 { font-size: 18px; }
+.prose h4 { font-size: 16px; }
+
+.prose img,
+.prose picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin: 20px auto;
+}
+
+.prose figure { margin: 20px 0; }
+
+.prose figcaption {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.prose a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose ul, .prose ol { padding-left: 24px; }
+.prose li { margin: 6px 0; }
+
+.prose blockquote {
+  margin: 20px 0;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  color: var(--muted);
+  font-style: italic;
+}
+
+.prose pre {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13.5px;
+}
+
+.prose :not(pre) > code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--surface2);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 28px 0;
+}
+
+/* Wide tables scroll rather than pushing the page sideways */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+}
+
+.prose th, .prose td {
+  border: 1px solid var(--border);
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.prose th {
+  background: var(--surface2);
+  font-weight: 650;
+}
+
+/* ── No full text available ───────────────────────────────────────────── */
+
+.noContent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 0 4px;
+}
+
+.snippet {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.noContentHint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.noContentBtn {
+  padding: 8px 14px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.noContentBtn:hover { opacity: 0.88; }
+
+/* ── Loading ──────────────────────────────────────────────────────────── */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.skelLine {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg,
+    var(--surface2) 0%,
+    color-mix(in oklab, var(--surface2) 55%, var(--border)) 50%,
+    var(--surface2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+.skelShort { width: 60%; }
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* ── Comments ─────────────────────────────────────────────────────────── */
+
+.commentsWrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 40px 40px;
+}
+
+/* Separates the conversation from the article without a hard rule */
+.commentsWrap::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin-bottom: 24px;
+  background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+}
+
+@media (max-width: 640px) {
+  .backdrop { padding: 0; }
+  .modal { width: 100%; height: 100%; border-radius: 0; }
+  .article { padding: 18px 20px 8px; }
+  .commentsWrap { padding: 22px 20px 32px; }
+  .title { font-size: 24px; }
+  .prose { font-size: 15.5px; }
+}

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../services/api';
-import { FeedArticle } from '../types';
+import { FeedArticle, CommentPrefs } from '../types';
 import { faviconUrl } from '../utils/color';
+import { useCommentCounts } from '../hooks/useCommentCounts';
+import { CommentBar } from './CommentsPanel';
+import ArticleDetailModal from './ArticleDetailModal';
 import LayoutSwitch, { ListIcon, CardsIcon, MagazineIcon } from './LayoutSwitch';
 import FilterDropdown from './FilterDropdown';
 import styles from './FolderArticles.module.css';
@@ -31,6 +34,9 @@ interface Props {
   onLayoutChange?: (layout: RssLayout) => void;
   markReadOnScroll?: boolean;
   onUnreadCountsChange?: (updates: { id: string; unreadCount: number }[]) => void;
+  commentPrefs: CommentPrefs;
+  // Clears the folder's site badges once its articles have been marked read
+  onFolderMarkedRead?: (folderId: string) => void;
 }
 
 function relativeDate(s: string | null): string {
@@ -47,6 +53,14 @@ function relativeDate(s: string | null): string {
   if (days < 7) return `${days}d ago`;
   return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
 }
+
+const CheckAllIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <polyline points="1 13 5 17 13 6" />
+    <polyline points="10 15 12 17 22 6" />
+  </svg>
+);
 
 function domainOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
@@ -92,7 +106,7 @@ function magazineVariants(articles: FeedArticle[]): MagVariant[] {
   });
 }
 
-export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10, layout = 'cards', onLayoutChange, markReadOnScroll = true, onUnreadCountsChange }: Props) {
+export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoaded, refreshKey, pageSize = 10, layout = 'cards', onLayoutChange, markReadOnScroll = true, onUnreadCountsChange, commentPrefs, onFolderMarkedRead }: Props) {
   const seededFolders = useRef<Set<string>>(new Set());
   const [readIds, setReadIds]           = useState<Set<string>>(new Set());
   const [articles, setArticles]         = useState<FeedArticle[]>([]);
@@ -268,6 +282,42 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
       .catch(() => {});
   }, [folderId, onArticlesLoaded]);
 
+  const { counts: commentCounts, setCount: setCommentCount } = useCommentCounts(
+    useMemo(() => articles.map(a => a.link), [articles])
+  );
+
+  // The article open in the reader modal
+  const [reading, setReading] = useState<FeedArticle | null>(null);
+
+  // ── Mark every article in this folder read ────────────────────────────
+  // Covers the pages that haven't been scrolled to yet, which is the whole
+  // point — the server walks the folder's feeds rather than the loaded list.
+  const [markingAll, setMarkingAll] = useState(false);
+  const unreadShowing = markReadOnScroll && displayed.some(a => !readIds.has(a.id));
+
+  async function handleMarkAllRead() {
+    if (markingAll) return;
+    setMarkingAll(true);
+    // Anything already queued would otherwise land after the bulk write
+    pendingRef.current.clear();
+    if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+    try {
+      const r = await apiFetch(`/api/v1/folders/${folderId}/articles/read-all`, { method: 'POST' });
+      if (r.ok) {
+        const data: { itemIds: string[] } = await r.json();
+        for (const id of data.itemIds ?? []) readIdsRef.current.add(id);
+        // Whatever is on screen is read now, even if the feed shifted mid-call
+        for (const a of articles) readIdsRef.current.add(a.id);
+        setReadIds(new Set(readIdsRef.current));
+        onFolderMarkedRead?.(folderId);
+      }
+    } catch {
+      // Read state is disposable — scrolling will re-mark on the next pass
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   function handleSave(a: FeedArticle) {
     onSaveArticle(
       { id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories, readTime: a.readTime, imageUrl: a.imageUrl },
@@ -317,9 +367,22 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
           Feed Articles
           <span className={styles.count}>{total}</span>
         </div>
-        {onLayoutChange && (
-          <LayoutSwitch value={layout} options={LAYOUT_OPTIONS} onChange={onLayoutChange} label="Feed layout" />
-        )}
+        <div className={styles.headerActions}>
+          {markReadOnScroll && (
+            <button
+              className={styles.markAllBtn}
+              onClick={handleMarkAllRead}
+              disabled={markingAll || !unreadShowing}
+              title="Mark every article in this folder as read"
+            >
+              <CheckAllIcon />
+              {markingAll ? 'Marking…' : 'Mark all read'}
+            </button>
+          )}
+          {onLayoutChange && (
+            <LayoutSwitch value={layout} options={LAYOUT_OPTIONS} onChange={onLayoutChange} label="Feed layout" />
+          )}
+        </div>
       </div>
 
       {(allCategories.length > 1 || allSources.length > 1) && (
@@ -375,6 +438,8 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
             cardRef={markReadOnScroll ? observeCard : undefined}
             onSave={() => handleSave(a)}
             onDismiss={() => handleDismiss(a.id)}
+            commentCount={commentCounts[a.link] ?? 0}
+            onOpenReader={() => setReading(a)}
           />
         ))}
       </div>
@@ -390,14 +455,41 @@ export default function FolderArticles({ folderId, onSaveArticle, onArticlesLoad
           </button>
         </>
       )}
+
+      {reading && (
+        <ArticleDetailModal
+          url={reading.link}
+          title={reading.title}
+          source={reading.source}
+          imageUrl={reading.imageUrl}
+          categories={reading.categories}
+          readTime={reading.readTime != null ? `${reading.readTime} min read` : null}
+          pubDate={reading.pubDate}
+          prefs={commentPrefs}
+          onCountChange={setCommentCount}
+          onClose={() => setReading(null)}
+          actions={
+            <>
+              <button onClick={() => { handleSave(reading); setReading(null); }}>
+                Save to reading list
+              </button>
+              <button onClick={() => { handleDismiss(reading.id); setReading(null); }}>
+                Dismiss
+              </button>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }
 
-function ArticleCard({ article, variant, isNew, cardRef, onSave, onDismiss }: {
+function ArticleCard({ article, variant, isNew, cardRef, onSave, onDismiss, commentCount, onOpenReader }: {
   article: FeedArticle; variant?: MagVariant; isNew?: boolean;
   cardRef?: (el: HTMLDivElement | null, id: string) => void;
   onSave: () => void; onDismiss: () => void;
+  commentCount: number;
+  onOpenReader: () => void;
 }) {
   const domain = domainOf(article.link);
   const feedDomain = domainOf(article.feedUrl);
@@ -462,6 +554,10 @@ function ArticleCard({ article, variant, isNew, cardRef, onSave, onDismiss }: {
             {isNew && <span className={styles.newDot} role="img" aria-label="Unread" title="Unread" />}
             <span className={styles.date}>{relativeDate(article.pubDate)}</span>
           </div>
+        </div>
+
+        <div className={styles.commentRow}>
+          <CommentBar count={commentCount} onClick={onOpenReader} />
         </div>
         {/* Floating window-style controls — top-right, over the cover art */}
         <div className={styles.cardActions}>

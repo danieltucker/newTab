@@ -33,6 +33,10 @@ export interface UserSettings {
   rssEnabled?: boolean;
   saveArticleMode?: 'dialog' | 'instant';
   markReadOnScroll?: boolean;
+  commentsShowPublic?: boolean;
+  commentsDefaultPublic?: boolean;
+  commentsSort?: 'newest' | 'oldest';
+  commentsAutoExpand?: boolean;
   activeWidgets: string[];
   worldClockZones: ClockZone[];
   rssFeedUrls: string[];
@@ -58,6 +62,10 @@ const DEFAULTS: UserSettings = {
   rssEnabled: true,
   saveArticleMode: 'dialog',
   markReadOnScroll: true,
+  commentsShowPublic: true,
+  commentsDefaultPublic: false,
+  commentsSort: 'newest',
+  commentsAutoExpand: false,
   activeWidgets: ['weather', 'notes'],
   worldClockZones: [],
   rssFeedUrls: [],

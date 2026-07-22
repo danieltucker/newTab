@@ -50,6 +50,28 @@ export interface ReadingListItem {
   savedAt: string;
 }
 
+// A comment thread hangs off an article's canonical URL, so the same
+// conversation shows on the feed card and the saved reading-list card alike.
+export interface ArticleComment {
+  id: string;
+  parentId: string | null;
+  title: string | null;      // root comments only
+  body: string;              // sanitized HTML from the rich editor
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+  mine: boolean;
+  author: { username: string; displayName: string; avatar: string | null };
+  replies: ArticleComment[];
+}
+
+export interface CommentPrefs {
+  showPublic: boolean;
+  defaultPublic: boolean;
+  sort: 'newest' | 'oldest';
+  autoExpand: boolean;
+}
+
 export interface AuthState {
   accessToken: string | null;
   username: string | null;

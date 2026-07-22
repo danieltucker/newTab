@@ -1,80 +1,11 @@
 import { Router, Response } from 'express';
-import nodeFetch from 'node-fetch';
 import prisma from '../lib/prisma';
-import { requireAuth, AuthRequest } from '../middleware/auth';
-import { parseFeed, parseFeedTitle, canonicalFeedKey } from '../lib/feedUtils';
+import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth';
+import { ensureFeeds, refreshStaleFeeds } from '../lib/feedRefresh';
 import logger from '../lib/logger';
-
-type FetchOptions = Parameters<typeof nodeFetch>[1] & { timeout?: number };
 
 const router = Router();
 router.use(requireAuth);
-
-const FEED_STALE_MS = 30 * 60 * 1000;   // 30 minutes
-const FEED_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-const UPSERT_CHUNK = 10;
-
-// Feeds are shared: URL permutations collapse onto one Feed row via
-// canonicalFeedKey, and each feed is fetched once no matter how many
-// users/folders reference it. Returns the Feed rows for the given URLs.
-async function ensureFeeds(feedUrls: string[]) {
-  const byKey = new Map<string, string>(); // canonicalKey -> first-seen fetchUrl
-  for (const url of feedUrls) {
-    const key = canonicalFeedKey(url);
-    if (!byKey.has(key)) byKey.set(key, url);
-  }
-  const keys = Array.from(byKey.keys());
-  if (keys.length === 0) return [];
-
-  const existing = await prisma.feed.findMany({ where: { canonicalKey: { in: keys } } });
-  const existingKeys = new Set(existing.map(f => f.canonicalKey));
-  const missing = keys.filter(k => !existingKeys.has(k));
-  if (missing.length > 0) {
-    await prisma.feed.createMany({
-      data: missing.map(k => ({ canonicalKey: k, fetchUrl: byKey.get(k)! })),
-      skipDuplicates: true,
-    });
-    return prisma.feed.findMany({ where: { canonicalKey: { in: keys } } });
-  }
-  return existing;
-}
-
-async function refreshStaleFeeds(feeds: { id: string; fetchUrl: string; lastCheckedAt: Date | null }[]) {
-  const now = new Date();
-  const stale = feeds.filter(f => !f.lastCheckedAt || now.getTime() - f.lastCheckedAt.getTime() > FEED_STALE_MS);
-  if (stale.length === 0) return;
-
-  await Promise.all(stale.map(async (feed) => {
-    try {
-      const resp = await nodeFetch(feed.fetchUrl, {
-        timeout: 8000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewTab/1.0; +RSS)' },
-      } as FetchOptions);
-      if (!resp.ok) return;
-
-      const xml = await resp.text();
-      const items = parseFeed(xml, 50);
-      const title = parseFeedTitle(xml) || new URL(feed.fetchUrl).hostname.replace(/^www\./, '');
-
-      // Process upserts in small chunks to avoid overwhelming the DB connection pool
-      for (let i = 0; i < items.length; i += UPSERT_CHUNK) {
-        const chunk = items.slice(i, i + UPSERT_CHUNK);
-        await Promise.all(chunk.map(item =>
-          prisma.feedItem.upsert({
-            where: { feedId_link: { feedId: feed.id, link: item.link } },
-            create: { feedId: feed.id, title: item.title, link: item.link, pubDate: item.date, fetchedAt: now, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
-            update: { fetchedAt: now, title: item.title, readTime: item.readTime, snippet: item.snippet, imageUrl: item.imageUrl, categories: item.categories },
-          }).catch(() => {})
-        ));
-      }
-
-      // Items that dropped out of the feed expire after the TTL
-      await prisma.feedItem.deleteMany({ where: { feedId: feed.id, fetchedAt: { lt: new Date(now.getTime() - FEED_TTL_MS) } } });
-      await prisma.feed.update({ where: { id: feed.id }, data: { title, lastCheckedAt: now } });
-    } catch {}
-  }));
-}
 
 router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   const folders = await prisma.folder.findMany({
@@ -157,7 +88,9 @@ router.post('/:id/mark-read', async (req: AuthRequest, res: Response): Promise<v
   res.json({ ok: true });
 });
 
-router.post('/refresh-all', async (req: AuthRequest, res: Response): Promise<void> => {
+// Admin-only: force-refreshing every feed fans one action out into many
+// outbound requests, so it stays behind requireAdmin to avoid abuse/amplification.
+router.post('/refresh-all', requireAdmin, async (req: AuthRequest, res: Response): Promise<void> => {
   const folders = await prisma.folder.findMany({
     where: { userId: req.userId!, NOT: { feedUrls: { isEmpty: true } } },
     select: { feedUrls: true },
@@ -167,8 +100,9 @@ router.post('/refresh-all', async (req: AuthRequest, res: Response): Promise<voi
     return;
   }
   const feeds = await ensureFeeds(folders.flatMap(f => f.feedUrls));
-  // Force refresh regardless of staleness — this is an explicit user action
-  await refreshStaleFeeds(feeds.map(f => ({ ...f, lastCheckedAt: null })));
+  // Force refresh regardless of staleness — this is an explicit user action.
+  // Still claim-protected + concurrency-limited inside refreshStaleFeeds.
+  await refreshStaleFeeds(feeds, { force: true });
   res.json({ refreshed: feeds.length });
 });
 
@@ -240,6 +174,40 @@ router.get('/:id/articles', async (req: AuthRequest, res: Response): Promise<voi
     res.json({ articles, total, hasMore: offset + articles.length < total });
   } catch (err) {
     logger.error(err, 'Feed articles error');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Marks every article in the folder's feeds read in one shot — including the
+// pages the client hasn't scrolled to yet, which is the point of "mark all
+// read". Badge clearing is left to POST /:id/mark-read so the two concerns stay
+// separate; the client fires both. Returns the ids so the open feed can drop
+// its unread outlines without a refetch.
+router.post('/:id/articles/read-all', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const folder = await prisma.folder.findFirst({ where: { id: req.params.id, userId: req.userId! } });
+    if (!folder) { res.status(404).json({ error: 'Not found' }); return; }
+    if (folder.feedUrls.length === 0) { res.json({ itemIds: [] }); return; }
+
+    const feeds = await ensureFeeds(folder.feedUrls);
+    const items = await prisma.feedItem.findMany({
+      where: {
+        feedId: { in: feeds.map(f => f.id) },
+        dismissals: { none: { userId: req.userId!, folderId: req.params.id } },
+      },
+      select: { id: true },
+      take: 5000,
+    });
+    if (items.length === 0) { res.json({ itemIds: [] }); return; }
+
+    await prisma.readFeedItem.createMany({
+      data: items.map(i => ({ userId: req.userId!, itemId: i.id })),
+      skipDuplicates: true,
+    });
+
+    res.json({ itemIds: items.map(i => i.id) });
+  } catch (err) {
+    logger.error(err, 'Mark all articles read error');
     res.status(500).json({ error: 'Server error' });
   }
 });

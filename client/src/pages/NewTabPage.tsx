@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import styles from './NewTabPage.module.css';
 import Header from '../components/Header';
 import SearchBar from '../components/SearchBar';
@@ -22,7 +22,7 @@ import { useBookmarks } from '../hooks/useBookmarks';
 import { useReadingList } from '../hooks/useReadingList';
 import { useSettings } from '../hooks/useSettings';
 import { apiGet, apiFetch } from '../services/api';
-import { Bookmark, Folder, FeedArticle } from '../types';
+import { Bookmark, Folder, FeedArticle, CommentPrefs } from '../types';
 import { ThemeSetting, ResolvedTheme } from '../App';
 
 // Background depth model, one entry per blob (far → close).
@@ -412,6 +412,14 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     }
   }
 
+  // Comment display prefs, shared by the feed and reading-list threads
+  const commentPrefs = useMemo<CommentPrefs>(() => ({
+    showPublic: settings.commentsShowPublic !== false,
+    defaultPublic: settings.commentsDefaultPublic === true,
+    sort: settings.commentsSort ?? 'newest',
+    autoExpand: settings.commentsAutoExpand === true,
+  }), [settings.commentsShowPublic, settings.commentsDefaultPublic, settings.commentsSort, settings.commentsAutoExpand]);
+
   // null when background is disabled, otherwise the resolved theme key
   const bgKey = settings.backgroundGradient !== 'none' ? resolvedTheme : null;
 
@@ -582,6 +590,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
                 onOpenArticle={setArticleUrl}
                 layout={settings.readingListLayout ?? 'cards'}
                 onLayoutChange={l => updateSetting({ readingListLayout: l })}
+                commentPrefs={commentPrefs}
               />
             </div>
             {settings.rssEnabled !== false && activeFolderId && (activeFolder?.feedUrls?.length ?? 0) > 0 && (
@@ -613,6 +622,8 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
                 onLayoutChange={l => updateSetting({ rssLayout: l })}
                 markReadOnScroll={settings.markReadOnScroll !== false}
                 onUnreadCountsChange={handleUnreadCountsChange}
+                commentPrefs={commentPrefs}
+                onFolderMarkedRead={handleMarkFolderRead}
               />
             )}
           </div>
@@ -751,6 +762,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
         <Console
           folders={folders}
           theme={resolvedTheme}
+          isAdmin={!!isAdmin}
           onSelectFolder={setActiveFolderId}
           onCreateFolder={handleCreateFolder}
           onSetTheme={handleSetTheme}

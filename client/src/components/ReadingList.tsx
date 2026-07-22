@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import styles from './ReadingList.module.css';
-import { ReadingListItem } from '../types';
+import { ReadingListItem, CommentPrefs } from '../types';
 import { parseDomain } from '../utils/color';
 import { apiFetch } from '../services/api';
+import { useCommentCounts } from '../hooks/useCommentCounts';
+import { CommentBar } from './CommentsPanel';
+import ArticleDetailModal from './ArticleDetailModal';
 import TagChipInput from './TagChipInput';
 import EditArticleModal from './EditArticleModal';
 import LayoutSwitch, { ListIcon, CardsIcon, MagazineIcon } from './LayoutSwitch';
@@ -63,16 +66,60 @@ function magazineVariants(items: ReadingListItem[]): MagVariant[] {
   });
 }
 
+// ── "You have N minutes saved" nudge ──
+
+// Manually saved articles often have no read time; assume a middling article
+// so the total still means something
+const DEFAULT_MINUTES = 5;
+
+function totalMinutes(items: ReadingListItem[]): number {
+  return items.reduce((sum, i) => sum + (parseInt(i.readTime, 10) || DEFAULT_MINUTES), 0);
+}
+
+function formatDuration(mins: number): string {
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'}`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const hours = `${h} hour${h === 1 ? '' : 's'}`;
+  return m ? `${hours} ${m} min` : hours;
+}
+
+// Same nudge all day, a different one tomorrow — so it doesn't read like a
+// static label but also doesn't reshuffle under you mid-session
+const NUDGES: ((d: React.ReactNode, n: number) => React.ReactNode)[] = [
+  d => <>You have about {d} of reading saved up — good time to start one.</>,
+  (d, n) => <>{d} across {n} saved article{n === 1 ? '' : 's'}. Pick one off the pile?</>,
+  d => <>That's roughly {d} of articles waiting on you.</>,
+  d => <>About {d} of saved reading. Now's as good a time as any.</>,
+  (d, n) => <>{n} article{n === 1 ? '' : 's'} queued up, near enough {d}. Fancy a read?</>,
+  d => <>Your reading list is holding about {d}. Maybe clear one out.</>,
+];
+
+function nudgeForToday(duration: React.ReactNode, count: number): React.ReactNode {
+  const day = Math.floor(Date.now() / 86_400_000);
+  return NUDGES[day % NUDGES.length](duration, count);
+}
+
+function ClockIcon() {
+  return (
+    <svg className={styles.timeIcon} width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="7" r="5.5"/>
+      <path d="M7 4v3.2l2 1.3"/>
+    </svg>
+  );
+}
+
 interface Props {
   items: ReadingListItem[];
   onSave: (item: Omit<ReadingListItem, 'id' | 'savedAt' | 'archived' | 'notes'>) => Promise<unknown>;
-  onUpdate: (id: string, patch: Pick<ReadingListItem, 'title' | 'tag' | 'notes'>) => Promise<void>;
+  onUpdate: (id: string, patch: Partial<Pick<ReadingListItem, 'title' | 'tag' | 'notes'>>) => Promise<void>;
   onDelete: (id: string) => void;
   onArchive: (id: string, archived: boolean) => Promise<void>;
   articleOpenMode?: 'new-tab' | 'same-tab' | 'iframe';
   onOpenArticle?: (url: string) => void;
   layout?: ReadingListLayout;
   onLayoutChange?: (layout: ReadingListLayout) => void;
+  commentPrefs: CommentPrefs;
 }
 
 function parseTags(tag: string): string[] {
@@ -121,9 +168,11 @@ interface CardProps {
   onEdit: (item: ReadingListItem) => void;
   articleOpenMode?: 'new-tab' | 'same-tab' | 'iframe';
   onOpenArticle?: (url: string) => void;
+  commentCount: number;
+  onOpenReader: () => void;
 }
 
-function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostReadAction, onOpened, onDelete, onUndo, onArchive, onEdit, articleOpenMode = 'new-tab', onOpenArticle }: CardProps) {
+function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostReadAction, onOpened, onDelete, onUndo, onArchive, onEdit, articleOpenMode = 'new-tab', onOpenArticle, commentCount, onOpenReader }: CardProps) {
   const tags = parseTags(item.tag);
 
   // Magazine text/brief variants stay type-only; everything else shows art when it exists
@@ -187,9 +236,6 @@ function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostRead
           </div>
         )}
         <div className={styles.title}>{item.title}</div>
-        {item.notes && (
-          <div className={styles.notes}>{item.notes}</div>
-        )}
       </a>
 
       <div className={styles.cardFooter}>
@@ -203,6 +249,13 @@ function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostRead
           {item.source}{item.readTime ? ` · ${item.readTime}` : ''}
         </div>
       </div>
+
+      {/* Outside the card's <a> — a button must not nest inside a link */}
+      {!isPendingDelete && (
+        <div className={styles.commentRow}>
+          <CommentBar count={commentCount} onClick={onOpenReader} />
+        </div>
+      )}
 
       {/* Floating window-style controls — top-right, over the cover art */}
       {!isPendingDelete && (
@@ -257,9 +310,22 @@ function ReadingCard({ item, variant, isPendingDelete, postReadState, onPostRead
 
 const DELETE_DELAY = 3000;
 
-export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchive, articleOpenMode, onOpenArticle, layout = 'cards', onLayoutChange }: Props) {
+export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchive, articleOpenMode, onOpenArticle, layout = 'cards', onLayoutChange, commentPrefs }: Props) {
   const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
   const timerMap = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const { counts: commentCounts, setCount: setCommentCount } = useCommentCounts(
+    useMemo(() => items.map(i => i.url), [items])
+  );
+
+  // A pre-comments note has been folded into the thread — drop it from the item
+  // so it can't be migrated twice
+  const handleNoteMigrated = useCallback((id: string) => {
+    onUpdate(id, { notes: '' }).catch(() => {});
+  }, [onUpdate]);
+
+  // The item open in the reader modal
+  const [reading, setReading] = useState<ReadingListItem | null>(null);
 
   function requestDelete(id: string) {
     setPendingDeletes(prev => new Set(prev).add(id));
@@ -394,6 +460,12 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
   useEffect(() => {
     if (activeTag && !allTags.includes(activeTag)) setActiveTag(null);
   }, [allTags, activeTag]);
+
+  const savedMinutes = totalMinutes(filtered);
+  const nudge = useMemo(
+    () => nudgeForToday(<span className={styles.timeAmount}>{formatDuration(savedMinutes)}</span>, filtered.length),
+    [savedMinutes, filtered.length]
+  );
 
   const gridClass = layout === 'list' ? styles.gridList
     : layout === 'magazine' ? styles.gridMagazine
@@ -533,6 +605,13 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
         </div>
       )}
 
+      {filtered.length > 0 && (
+        <div className={styles.timeBanner}>
+          <ClockIcon />
+          <span>{nudge}</span>
+        </div>
+      )}
+
       <div className={gridClass}>
         {filtered.length === 0 && !expanded ? (
           <div className={styles.empty}>
@@ -553,6 +632,8 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
             onEdit={setEditingItem}
             articleOpenMode={articleOpenMode}
             onOpenArticle={onOpenArticle}
+            commentCount={commentCounts[item.url] ?? 0}
+            onOpenReader={() => setReading(item)}
           />
         ))}
       </div>
@@ -580,6 +661,8 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
                   onEdit={setEditingItem}
                   articleOpenMode={articleOpenMode}
                   onOpenArticle={onOpenArticle}
+                  commentCount={commentCounts[item.url] ?? 0}
+                  onOpenReader={() => setReading(item)}
                 />
               ))}
             </div>
@@ -592,6 +675,33 @@ export default function ReadingList({ items, onSave, onUpdate, onDelete, onArchi
           item={editingItem}
           onSave={onUpdate}
           onClose={() => setEditingItem(null)}
+        />
+      )}
+
+      {reading && (
+        <ArticleDetailModal
+          url={reading.url}
+          title={reading.title}
+          source={reading.source}
+          imageUrl={reading.imageUrl}
+          categories={parseTags(reading.tag)}
+          readTime={reading.readTime || null}
+          pubDate={reading.savedAt}
+          prefs={commentPrefs}
+          onCountChange={setCommentCount}
+          legacyNote={reading.notes}
+          onLegacyNoteMigrated={() => handleNoteMigrated(reading.id)}
+          onClose={() => setReading(null)}
+          actions={
+            <>
+              <button onClick={() => { handleArchive(reading.id, !reading.archived); setReading(null); }}>
+                {reading.archived ? 'Restore' : 'Archive'}
+              </button>
+              <button onClick={() => { setReading(null); setEditingItem(reading); }}>
+                Edit
+              </button>
+            </>
+          }
         />
       )}
     </div>
