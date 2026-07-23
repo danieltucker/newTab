@@ -11,7 +11,8 @@ import { CSS } from '@dnd-kit/utilities';
 import styles from './NotesConsole.module.css';
 import RichEditor from './RichEditor';
 import { NoteDoc, NoteFolder } from '../hooks/useSettings';
-import { noteText, noteSnippet } from '../utils/noteText';
+import { searchNotes } from '../utils/noteText';
+import { markdownToHtml } from '../utils/noteMigrate';
 import {
   INDENT, isFolderId, folderIdOf, sameOrder, buildRows, getProjection, computeDrop, reconcileFlat,
 } from '../utils/noteTree';
@@ -45,81 +46,6 @@ function expiryLabel(deletedAt: number): string {
 
 function blankNote(): NoteDoc {
   return { id: uid(), title: '', body: '', updatedAt: Date.now() };
-}
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// One-time migration of the old single markdown note into editor HTML. Covers
-// the block types the old slash menu produced; inline markdown is left as text.
-function markdownToHtml(md: string): string {
-  const lines = md.replace(/\r\n/g, '\n').split('\n');
-  const out: string[] = [];
-  let i = 0;
-  let listBuf: string[] = [];
-  let listTag: 'ul' | 'ol' | null = null;
-
-  const flushList = () => {
-    if (listTag) { out.push(`<${listTag}>${listBuf.join('')}</${listTag}>`); listBuf = []; listTag = null; }
-  };
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const fence = line.match(/^```/);
-    if (fence) {
-      flushList();
-      const code: string[] = [];
-      i++;
-      while (i < lines.length && !/^```/.test(lines[i])) { code.push(esc(lines[i])); i++; }
-      i++; // closing fence
-      out.push(`<pre>${code.join('\n') || '<br>'}</pre>`);
-      continue;
-    }
-    let m: RegExpMatchArray | null;
-    if ((m = line.match(/^(#{1,3})\s+(.*)$/))) {
-      flushList();
-      out.push(`<h${m[1].length}>${esc(m[2])}</h${m[1].length}>`);
-    } else if ((m = line.match(/^\s*- \[( |x)\]\s+(.*)$/i))) {
-      flushList();
-      const checked = m[1].toLowerCase() === 'x';
-      out.push(`<div class="note-todo" data-checked="${checked}">${esc(m[2]) || '<br>'}</div>`);
-    } else if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
-      if (listTag && listTag !== 'ul') flushList();
-      listTag = 'ul';
-      listBuf.push(`<li>${esc(m[1])}</li>`);
-    } else if ((m = line.match(/^\s*\d+\.\s+(.*)$/))) {
-      if (listTag && listTag !== 'ol') flushList();
-      listTag = 'ol';
-      listBuf.push(`<li>${esc(m[1])}</li>`);
-    } else if ((m = line.match(/^>\s+(.*)$/))) {
-      flushList();
-      out.push(`<blockquote>${esc(m[1])}</blockquote>`);
-    } else if (/^\s*---\s*$/.test(line)) {
-      flushList();
-      out.push('<hr>');
-    } else if (line.trim() === '') {
-      flushList();
-    } else {
-      flushList();
-      out.push(`<p>${esc(line)}</p>`);
-    }
-    i++;
-  }
-  flushList();
-  return out.join('') || '<p><br></p>';
-}
-
-// Title and body-text matches, with a line of context for the latter.
-function search(docs: NoteDoc[], q: string): { doc: NoteDoc; snippet?: string }[] {
-  if (!q) return docs.map(doc => ({ doc }));
-  return docs.flatMap(doc => {
-    const text = noteText(doc.body);
-    const at = text.toLowerCase().indexOf(q);
-    const inTitle = doc.title.toLowerCase().includes(q);
-    if (at < 0 && !inTitle) return [];
-    return [{ doc, snippet: at >= 0 ? noteSnippet(text, q) : undefined }];
-  });
 }
 
 interface NoteRowProps {
@@ -590,8 +516,8 @@ export default function NotesConsole({
   // the doc objects (no re-render), so this recomputes off the live text every
   // time the query changes.
   const q = query.trim().toLowerCase();
-  const results = useMemo(() => search(liveDocs, q), [liveDocs, q]);
-  const trashResults = useMemo(() => search(trashDocs, q), [trashDocs, q]);
+  const results = useMemo(() => searchNotes(liveDocs, q), [liveDocs, q]);
+  const trashResults = useMemo(() => searchNotes(trashDocs, q), [trashDocs, q]);
 
   // Opening a hit from the main search bar: jump to that note once it's known.
   useEffect(() => {

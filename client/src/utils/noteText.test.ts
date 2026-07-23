@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
-import { noteText, noteSnippet } from './noteText';
+import { noteText, noteSnippet, searchNotes } from './noteText';
+import { NoteDoc } from '../hooks/useSettings';
 
 describe('noteText', () => {
   it('returns empty string for empty input', () => {
@@ -42,5 +43,41 @@ describe('noteSnippet', () => {
     expect(out.startsWith('…')).toBe(true);
     expect(out.endsWith('…')).toBe(true);
     expect(out).toContain('NEEDLE');
+  });
+});
+
+describe('searchNotes', () => {
+  const note = (id: string, title: string, body: string): NoteDoc => ({ id, title, body });
+  const docs = [
+    note('1', 'Groceries', '<p>milk and eggs</p>'),
+    note('2', 'Work', '<p>meeting notes</p>'),
+  ];
+
+  it('returns every note with no snippet when the query is empty', () => {
+    const out = searchNotes(docs, '');
+    expect(out.map(r => r.doc.id)).toEqual(['1', '2']);
+    expect(out.every(r => r.snippet === undefined)).toBe(true);
+  });
+
+  it('matches body text and carries a snippet around the hit', () => {
+    const out = searchNotes(docs, 'milk');
+    expect(out.map(r => r.doc.id)).toEqual(['1']);
+    expect(out[0].snippet).toContain('milk');
+  });
+
+  it('matches the title without a snippet', () => {
+    const out = searchNotes(docs, 'work');
+    expect(out.map(r => r.doc.id)).toEqual(['2']);
+    expect(out[0].snippet).toBeUndefined();
+  });
+
+  it('a title-only match has no snippet even when the body differs', () => {
+    const out = searchNotes(docs, 'grocer');   // matches title, not body
+    expect(out.map(r => r.doc.id)).toEqual(['1']);
+    expect(out[0].snippet).toBeUndefined();
+  });
+
+  it('excludes notes that match neither title nor body', () => {
+    expect(searchNotes(docs, 'zzz')).toEqual([]);
   });
 });
