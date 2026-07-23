@@ -1,0 +1,93 @@
+import { describe, it, expect } from 'vitest';
+import { parseDomain, parseLink, faviconUrl, deriveName, deriveColor } from './color';
+
+describe('parseDomain (host only)', () => {
+  it('returns a bare host', () => {
+    expect(parseDomain('github.com')).toBe('github.com');
+  });
+
+  it('strips protocol and www', () => {
+    expect(parseDomain('https://github.com')).toBe('github.com');
+    expect(parseDomain('http://www.github.com')).toBe('github.com');
+  });
+
+  it('drops any path — host only', () => {
+    expect(parseDomain('github.com/danieltucker')).toBe('github.com');
+    expect(parseDomain('https://www.github.com/a/b?q=1')).toBe('github.com');
+  });
+
+  it('lowercases', () => {
+    expect(parseDomain('GitHub.COM')).toBe('github.com');
+  });
+
+  it('rejects things that are not a host', () => {
+    expect(parseDomain('')).toBeNull();
+    expect(parseDomain('ab')).toBeNull();       // too short / no dot
+    expect(parseDomain('localhost')).toBeNull(); // no dot
+  });
+});
+
+describe('parseLink (host + path)', () => {
+  it('keeps a bare host unchanged', () => {
+    expect(parseLink('github.com')).toBe('github.com');
+  });
+
+  // Regression: editing a bookmark from "github.com" to "github.com/danieltucker"
+  // used to silently drop the path (parseDomain split on "/"), so the change
+  // looked like it never saved. parseLink must preserve it.
+  it('preserves the path (regression: github.com/danieltucker)', () => {
+    expect(parseLink('github.com/danieltucker')).toBe('github.com/danieltucker');
+    expect(parseLink('https://www.github.com/danieltucker')).toBe('github.com/danieltucker');
+  });
+
+  it('lowercases the host but preserves path case', () => {
+    expect(parseLink('GitHub.com/DanielTucker')).toBe('github.com/DanielTucker');
+  });
+
+  it('keeps query strings and deeper paths', () => {
+    expect(parseLink('example.com/a/b?x=1')).toBe('example.com/a/b?x=1');
+    expect(parseLink('sub.example.com/path')).toBe('sub.example.com/path');
+  });
+
+  it('trims a trailing slash', () => {
+    expect(parseLink('github.com/')).toBe('github.com');
+    expect(parseLink('github.com/danieltucker/')).toBe('github.com/danieltucker');
+  });
+
+  it('rejects things without a valid host', () => {
+    expect(parseLink('')).toBeNull();
+    expect(parseLink('ab')).toBeNull();
+    expect(parseLink('localhost/foo')).toBeNull(); // host has no dot
+  });
+});
+
+describe('faviconUrl', () => {
+  it('builds a favicon URL from a bare host', () => {
+    expect(faviconUrl('github.com')).toBe('/api/v1/util/favicon?domain=github.com');
+  });
+
+  // The favicon service only wants the host, so a stored link with a path must
+  // still resolve the correct favicon.
+  it('strips a path down to the host', () => {
+    expect(faviconUrl('github.com/danieltucker')).toBe('/api/v1/util/favicon?domain=github.com');
+    expect(faviconUrl('https://github.com/a/b?q=1')).toBe('/api/v1/util/favicon?domain=github.com');
+  });
+});
+
+describe('deriveName', () => {
+  it('capitalizes the first label of the host', () => {
+    expect(deriveName('github.com')).toBe('Github');
+    expect(deriveName('sub.example.com')).toBe('Sub');
+    expect(deriveName('example.co.uk')).toBe('Example');
+  });
+});
+
+describe('deriveColor', () => {
+  it('is deterministic for a given input', () => {
+    expect(deriveColor('github.com')).toBe(deriveColor('github.com'));
+  });
+
+  it('returns a hex colour', () => {
+    expect(deriveColor('github.com')).toMatch(/^#[0-9A-Fa-f]{6}$/);
+  });
+});
