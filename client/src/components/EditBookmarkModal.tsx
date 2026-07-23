@@ -12,7 +12,7 @@ const PALETTE = [
 interface Props {
   bookmark: Bookmark;
   folders: Folder[];
-  onSave: (id: string, updates: { domain: string; name: string; faviconUrl: string; color: string; folderId: string }) => Promise<void>;
+  onSave: (id: string, updates: { domain: string; name: string; faviconUrl: string; color: string; folderId: string | null }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onClose: () => void;
 }

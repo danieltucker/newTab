@@ -92,6 +92,7 @@ const COMMANDS: Record<string, Command> = {
         '',
         'System',
         col('theme',     'theme <dark|light|auto>  — Switch UI theme'),
+        col('cache',     'cache clear  — Clear local cache & reload'),
         col('version',   'App version info'),
         col('clear',     'Clear the console'),
         col('help',      'help [command]  — This list, or per-command detail'),
@@ -137,6 +138,32 @@ const COMMANDS: Record<string, Command> = {
   clear: {
     desc: 'Clear the console',
     run: () => '__CLEAR__',
+  },
+
+  cache: {
+    desc: 'Clear local cache & reload',
+    usage: 'cache clear',
+    help: [
+      'Clears this browser\'s cached bookmarks, pinned sites and sidebar state,',
+      'then reloads so everything is refetched fresh from the server. Use it if',
+      'bookmarks, folders or pins look stale or out of sync.',
+      '',
+      '  cache clear   Clear the local cache and reload',
+    ],
+    run: (args) => {
+      const sub = (args[0] ?? 'clear').toLowerCase();
+      if (sub !== 'clear') return 'Usage: cache clear';
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('bfc_') || k.startsWith('bpc_') || k.startsWith('sidebarExpanded_'))) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch {}
+      setTimeout(() => window.location.reload(), 300);
+      return 'Cleared local cache — reloading…';
+    },
   },
 
   ip: {

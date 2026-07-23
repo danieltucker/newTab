@@ -18,6 +18,7 @@ export interface UserSettings {
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
   bookmarkOpenMode?: 'same-tab' | 'new-tab';
+  bookmarkLayout?: 'panel' | 'inline';
   backgroundGradient?: 'none' | 'aurora' | 'dusk' | 'ocean' | 'midnight' | 'rose';
   rssLayout?: 'list' | 'cards' | 'magazine';
   readingListLayout?: 'list' | 'cards' | 'magazine';
@@ -47,6 +48,7 @@ const DEFAULTS: UserSettings = {
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',
   bookmarkOpenMode: 'same-tab',
+  bookmarkLayout: 'panel',
   backgroundGradient: 'none',
   rssLayout: 'cards',
   readingListLayout: 'cards',
@@ -83,7 +85,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll', 'commentsShowPublic', 'commentsDefaultPublic', 'commentsSort', 'commentsAutoExpand']);
+  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'bookmarkLayout', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll', 'commentsShowPublic', 'commentsDefaultPublic', 'commentsSort', 'commentsAutoExpand']);
   const incoming = req.body as Record<string, unknown>;
 
   // Validate keys

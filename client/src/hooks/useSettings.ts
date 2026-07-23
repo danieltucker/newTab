@@ -27,6 +27,7 @@ export interface UserSettings {
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
   bookmarkOpenMode?: 'same-tab' | 'new-tab';
+  bookmarkLayout?: 'panel' | 'inline';
   backgroundGradient?: 'none' | 'default';
   rssLayout?: 'list' | 'cards' | 'magazine';
   readingListLayout?: 'list' | 'cards' | 'magazine';
@@ -56,6 +57,7 @@ const DEFAULTS: UserSettings = {
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',
   bookmarkOpenMode: 'same-tab',
+  bookmarkLayout: 'panel',
   backgroundGradient: 'default',
   rssLayout: 'cards',
   readingListLayout: 'cards',

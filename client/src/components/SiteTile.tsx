@@ -11,10 +11,11 @@ interface Props {
   onEdit?: (b: Bookmark) => void;
   onDelete?: (id: string) => void;
   onVisit?: (id: string) => void;
+  onPin?: (id: string) => void;
   openMode?: 'same-tab' | 'new-tab';
 }
 
-export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVisit, openMode = 'same-tab' }: Props) {
+export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVisit, onPin, openMode = 'same-tab' }: Props) {
   const unreadCount = bookmark.unreadCount ?? 0;
   const hasNewContent = unreadCount > 0;
   const [faviconFailed, setFaviconFailed] = useState(false);
@@ -100,7 +101,7 @@ export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVi
       </div>
       <span className={styles.name}>{bookmark.name}</span>
 
-      {(onEdit || onDelete) && (
+      {(onEdit || onDelete || onPin) && (
         <div className={styles.menuWrap} ref={menuRef}>
           <button
             className={styles.menuTrigger}
@@ -112,6 +113,14 @@ export default function SiteTile({ bookmark, dragOverlay, onEdit, onDelete, onVi
           </button>
           {menuOpen && (
             <div className={styles.dropdown}>
+              {onPin && (
+                <button
+                  className={styles.dropdownItem}
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); setMenuOpen(false); onPin(bookmark.id); }}
+                >
+                  Pin to top
+                </button>
+              )}
               {onEdit && (
                 <button
                   className={styles.dropdownItem}

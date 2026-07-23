@@ -136,8 +136,8 @@ model ReadFeedItem {
 
 model Bookmark {
   id         String   @id @default(cuid())
-  folderId   String
-  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folderId   String?
+  folder     Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   domain     String
@@ -150,6 +150,9 @@ model Bookmark {
   feedLatestAt  DateTime?
   unreadCount   Int       @default(0)
   lastVisitedAt DateTime?
+  // Pinned bookmarks surface in the sidebar's top pin grid. They keep their
+  // folder membership — pinning is a view flag, not a move.
+  pinned        Boolean   @default(false)
   createdAt     DateTime  @default(now())
 
   @@index([userId])

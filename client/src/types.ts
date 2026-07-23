@@ -24,7 +24,9 @@ export interface FeedArticle {
 
 export interface Bookmark {
   id: string;
-  folderId: string;
+  folderId: string | null;
+  // Pinned bookmarks surface in the sidebar's top pin grid but keep their folder.
+  pinned?: boolean;
   domain: string;
   name: string;
   faviconUrl: string;

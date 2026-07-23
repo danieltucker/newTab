@@ -278,6 +278,34 @@ router.post('/:id/check-feed', async (req: AuthRequest, res: Response): Promise<
   res.json(updated);
 });
 
+// Pin a bookmark: surface it in the sidebar's top pin grid. The bookmark keeps
+// its folder — pinning is a view flag, not a move. Position orders the pin grid.
+router.post('/:id/pin', async (req: AuthRequest, res: Response): Promise<void> => {
+  const existing = await prisma.bookmark.findFirst({ where: { id: req.params.id, userId: req.userId! } });
+  if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+  const pinnedCount = await prisma.bookmark.count({ where: { userId: req.userId!, pinned: true } });
+  const updated = await prisma.bookmark.update({
+    where: { id: existing.id },
+    data: { pinned: true, position: pinnedCount },
+  });
+  res.json(updated);
+});
+
+// Unpin: drop it from the pin grid. It reappears in its (retained) folder,
+// appended to the end of that folder's list.
+router.post('/:id/unpin', async (req: AuthRequest, res: Response): Promise<void> => {
+  const existing = await prisma.bookmark.findFirst({ where: { id: req.params.id, userId: req.userId! } });
+  if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+  const count = await prisma.bookmark.count({
+    where: { userId: req.userId!, folderId: existing.folderId, pinned: false },
+  });
+  const updated = await prisma.bookmark.update({
+    where: { id: existing.id },
+    data: { pinned: false, position: count },
+  });
+  res.json(updated);
+});
+
 router.post('/:id/visited', async (req: AuthRequest, res: Response): Promise<void> => {
   const existing = await prisma.bookmark.findFirst({ where: { id: req.params.id, userId: req.userId! } });
   if (!existing) { res.status(404).json({ error: 'Not found' }); return; }

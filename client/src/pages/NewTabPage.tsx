@@ -21,19 +21,15 @@ import { useFolders } from '../hooks/useFolders';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useReadingList } from '../hooks/useReadingList';
 import { useSettings } from '../hooks/useSettings';
-import { apiGet, apiFetch } from '../services/api';
+import { apiGet, apiFetch, apiPost, apiPut } from '../services/api';
 import { Bookmark, Folder, FeedArticle, CommentPrefs } from '../types';
 import { ThemeSetting, ResolvedTheme } from '../App';
 
-// Background depth model, one entry per blob (far → close).
-// pointer: max px the blob leans as the cursor crosses the viewport — the far
-// layer moves opposite the near ones, which is what sells the depth.
-// scroll: fraction of scroll distance the blob travels (content moves at 1.0).
-const BLOB_MOTION = [
-  { pointer: -18, scroll: 0.08 },
-  { pointer:  32, scroll: 0.18 },
-  { pointer:  56, scroll: 0.34 },
-] as const;
+// Background depth — max px each blob leans as the cursor crosses the viewport.
+// The far layer leans opposite the near ones, which is what sells the depth.
+// The glow layer spans the whole page and scrolls with it (see .bgRoot), so the
+// only motion applied here is the pointer lean — there is no scroll parallax.
+const BLOB_LEAN = [-18, 32, 56] as const;
 
 interface Props {
   accessToken: string;
@@ -89,6 +85,20 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     } catch { return {}; }
   });
 
+  // Folder-less bookmarks — "pinned" to the top of the sidebar. Cached in the
+  // same localStorage payload under a reserved key so they survive a reload.
+  const PIN_CACHE_KEY = `bpc_${username}`;
+  const [pinnedBookmarks, setPinnedBookmarks] = useState<Bookmark[]>(() => {
+    try {
+      const raw = localStorage.getItem(PIN_CACHE_KEY);
+      return raw ? (JSON.parse(raw) as Bookmark[]) : [];
+    } catch { return []; }
+  });
+
+  const cachePinned = useCallback((list: Bookmark[]) => {
+    try { localStorage.setItem(PIN_CACHE_KEY, JSON.stringify(list)); } catch {}
+  }, [PIN_CACHE_KEY]);
+
   // Sync active folder bookmarks into the display cache (and localStorage).
   // Guard: only update when bookmarks actually belong to activeFolderId.
   useEffect(() => {
@@ -106,12 +116,18 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     if (!accessToken) return;
     apiGet<Bookmark[]>('/api/v1/bookmarks/all').then(all => {
       const grouped: Record<string, Bookmark[]> = {};
+      const pinned: Bookmark[] = [];
       for (const bm of all) {
+        // Pinned bookmarks show in BOTH the top pin grid and their own folder.
+        if (bm.pinned) pinned.push(bm);
+        if (bm.folderId == null) continue;
         if (!grouped[bm.folderId]) grouped[bm.folderId] = [];
         grouped[bm.folderId].push(bm);
       }
       setBookmarksByFolder(grouped);
       try { localStorage.setItem(CACHE_KEY, JSON.stringify(grouped)); } catch {}
+      setPinnedBookmarks(pinned);
+      cachePinned(pinned);
     }).catch(() => {});
   }, [accessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -336,7 +352,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
   }
 
   async function handleSaveBookmark(id: string, updates: {
-    domain: string; name: string; faviconUrl: string; color: string; folderId: string;
+    domain: string; name: string; faviconUrl: string; color: string; folderId: string | null;
   }) {
     const updated = await updateBookmark(id, updates);
     // Refresh sidebar preview cache
@@ -356,6 +372,15 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
         }));
       }
     }
+    // Keep the pinned list in sync — the edited bookmark may be a pinned one
+    // (edited from the sidebar). Only drop it if it's no longer pinned.
+    if (updated) {
+      setPinnedBookmarks(prev => {
+        const next = prev.map(b => b.id === id ? updated : b).filter(b => b.pinned);
+        cachePinned(next);
+        return next;
+      });
+    }
   }
 
   async function handleDeleteBookmark(id: string) {
@@ -366,6 +391,53 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
         [activeFolderId]: prev[activeFolderId]?.filter(b => b.id !== id) ?? [],
       }));
     }
+    setPinnedBookmarks(prev => {
+      if (!prev.some(b => b.id === id)) return prev;
+      const next = prev.filter(b => b.id !== id);
+      cachePinned(next);
+      return next;
+    });
+  }
+
+  // Pin: surface a bookmark in the top pin grid. It stays in its folder too, so
+  // update it in place there (pinned flag) and add it to the pin list.
+  async function handlePinBookmark(id: string) {
+    const updated = await apiPost<Bookmark>(`/api/v1/bookmarks/${id}/pin`, {});
+    setBookmarks(prev => prev.map(b => b.id === id ? updated : b));
+    setBookmarksByFolder(prev => {
+      const next: Record<string, Bookmark[]> = {};
+      for (const [fid, list] of Object.entries(prev)) next[fid] = list.map(b => b.id === id ? updated : b);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setPinnedBookmarks(prev => {
+      const next = [...prev.filter(b => b.id !== id), updated];
+      cachePinned(next);
+      return next;
+    });
+  }
+
+  // Unpin: drop it from the pin grid. It remains in its folder — update in place.
+  async function handleUnpinBookmark(id: string) {
+    const updated = await apiPost<Bookmark>(`/api/v1/bookmarks/${id}/unpin`, {});
+    setPinnedBookmarks(prev => {
+      const next = prev.filter(b => b.id !== id);
+      cachePinned(next);
+      return next;
+    });
+    setBookmarks(prev => prev.map(b => b.id === id ? updated : b));
+    setBookmarksByFolder(prev => {
+      const next: Record<string, Bookmark[]> = {};
+      for (const [fid, list] of Object.entries(prev)) next[fid] = list.map(b => b.id === id ? updated : b);
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  async function handleReorderPinned(reordered: Bookmark[]) {
+    setPinnedBookmarks(reordered);
+    cachePinned(reordered);
+    await apiPut('/api/v1/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
   }
 
   async function handleSaveFolder(id: string, updates: { name: string; color: string; feedUrls: string[] }) {
@@ -425,28 +497,25 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
 
   const blobWrapRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Background motion — the blobs lean gently toward the cursor and separate
-  // at different rates on scroll. Both inputs are lerped in a single rAF loop
-  // so the motion glides instead of tracking 1:1 (transforms are
-  // compositor-only, so the per-frame cost is negligible).
+  // Background motion — the blobs lean gently toward the cursor. The pointer is
+  // lerped in a single rAF loop so the motion glides instead of tracking 1:1
+  // (transforms are compositor-only, so the per-frame cost is negligible).
   useEffect(() => {
     if (!bgKey) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     let rafId = -1;
-    let px = 0, py = 0;                        // pointer target, -0.5..0.5 of viewport
-    let sy = window.scrollY;                   // scroll target
-    let cpx = 0, cpy = 0, csy = window.scrollY; // current (lerped) values
+    let px = 0, py = 0;       // pointer target, -0.5..0.5 of viewport
+    let cpx = 0, cpy = 0;     // current (lerped) values
 
     function frame() {
       cpx += (px - cpx) * 0.04;
       cpy += (py - cpy) * 0.04;
-      csy += (sy - csy) * 0.09;
-      BLOB_MOTION.forEach((m, i) => {
+      BLOB_LEAN.forEach((lean, i) => {
         const el = blobWrapRefs.current[i];
         if (el) {
-          const x = cpx * m.pointer;
-          const y = cpy * m.pointer - csy * m.scroll;
+          const x = cpx * lean;
+          const y = cpy * lean;
           el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
         }
       });
@@ -457,21 +526,19 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
       px = e.clientX / window.innerWidth - 0.5;
       py = e.clientY / window.innerHeight - 0.5;
     }
-    function onScroll() { sy = window.scrollY; }
 
     window.addEventListener('mousemove', onMove, { passive: true });
-    window.addEventListener('scroll', onScroll, { passive: true });
     rafId = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('scroll', onScroll);
     };
   }, [bgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
-      {/* Background — fixed, beneath all page content (z-index 0) */}
+      <div className={styles.root}>
+      {/* Background — spans the whole page, beneath all content (z-index 0) */}
       {bgKey && (
         <div className={styles.bgRoot}>
           <div className={styles.bgBase} />
@@ -540,7 +607,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
           <SearchBar
             searchEngine={settings.searchEngine}
             searchNewTab={settings.searchNewTab}
-            bookmarks={Object.values(bookmarksByFolder).flat()}
+            bookmarks={[...Object.values(bookmarksByFolder).flat(), ...pinnedBookmarks]}
             readingItems={readingList}
             feedArticles={feedArticles.map(a => ({ id: a.id, url: a.link, title: a.title, source: a.source, categories: a.categories }))}
             notes={(settings.noteDocs ?? []).filter(n => !n.deletedAt)}
@@ -554,28 +621,42 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
               folders={folders}
               activeFolderId={activeFolderId}
               bookmarksByFolder={bookmarksByFolder}
+              pinnedBookmarks={pinnedBookmarks}
+              layout={settings.bookmarkLayout ?? 'panel'}
+              username={username}
+              bookmarkOpenMode={settings.bookmarkOpenMode}
               onSelectFolder={handleSelectFolder}
               onNewFolder={() => setShowNewFolder(true)}
+              onNewBookmark={() => setShowAddLink(true)}
               onEditFolder={setEditingFolder}
               onDeleteFolder={handleDeleteFolder}
               onMarkFolderRead={handleMarkFolderRead}
               onReorderFolders={reorderFolders}
+              onEditBookmark={setEditingBookmark}
+              onDeleteBookmark={handleDeleteBookmark}
+              onVisitBookmark={markVisited}
+              onPinBookmark={handlePinBookmark}
+              onUnpinBookmark={handleUnpinBookmark}
+              onReorderPinned={handleReorderPinned}
               folderRefs={folderRefs}
             />
           </div>
 
           <div>
-            <BookmarksGrid
-              folder={activeFolder}
-              bookmarks={activeFolderId ? (bookmarksByFolder[activeFolderId] ?? []) : []}
-              tileRefs={tileRefs}
-              onAddLink={() => setShowAddLink(true)}
-              onReorder={reorderBookmarks}
-              onEditBookmark={setEditingBookmark}
-              onDeleteBookmark={handleDeleteBookmark}
-              onVisit={markVisited}
-              bookmarkOpenMode={settings.bookmarkOpenMode}
-            />
+            {(settings.bookmarkLayout ?? 'panel') === 'panel' && (
+              <BookmarksGrid
+                folder={activeFolder}
+                bookmarks={activeFolderId ? (bookmarksByFolder[activeFolderId] ?? []) : []}
+                tileRefs={tileRefs}
+                onAddLink={() => setShowAddLink(true)}
+                onReorder={reorderBookmarks}
+                onEditBookmark={setEditingBookmark}
+                onDeleteBookmark={handleDeleteBookmark}
+                onVisit={markVisited}
+                onPin={handlePinBookmark}
+                bookmarkOpenMode={settings.bookmarkOpenMode}
+              />
+            )}
             <div className={styles.bottomRow}>
               <ReadingList
                 items={readingList}
@@ -631,9 +712,10 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
 
         <footer className={styles.footer}>
           <a href="https://github.com/danieltucker/newTab" target="_blank" rel="noopener noreferrer" className={styles.footerLink}>
-            v1.4.3
+            v1.5
           </a>
         </footer>
+      </div>
       </div>
 
       {/* Notes launcher — small round button, bottom-right */}
@@ -700,12 +782,17 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
             // Refetch the bulk bookmark cache so new imports appear immediately
             apiGet<Bookmark[]>('/api/v1/bookmarks/all').then(all => {
               const grouped: Record<string, Bookmark[]> = {};
+              const pinned: Bookmark[] = [];
               for (const bm of all) {
+                if (bm.pinned) pinned.push(bm);
+                if (bm.folderId == null) continue;
                 if (!grouped[bm.folderId]) grouped[bm.folderId] = [];
                 grouped[bm.folderId].push(bm);
               }
               setBookmarksByFolder(grouped);
               try { localStorage.setItem(CACHE_KEY, JSON.stringify(grouped)); } catch {}
+              setPinnedBookmarks(pinned);
+              cachePinned(pinned);
             }).catch(() => {});
           }}
         />

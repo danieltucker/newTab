@@ -4,6 +4,224 @@
   gap: 4px;
 }
 
+/* Inline (Arc-style) layout on desktop grows to fit its content — no inner
+   scrollbar, the page scrolls as a whole. */
+
+.folderGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Pinned bookmarks grid (top of sidebar) ── */
+.pinSection {
+  margin-bottom: 6px;
+}
+
+.pinGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pinTileWrap {
+  position: relative;
+}
+
+/* Anchor the ··· menu to the tile's own top-right corner (not the normal flow
+   after it, which lands on the content below and is impossible to hit). */
+.pinTileWrap .menuWrap {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 3;
+}
+
+.pinTileWrap:hover .menuWrap {
+  opacity: 1;
+}
+
+.pinTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.pinTile:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+
+.pinTile:active {
+  transform: scale(0.97);
+}
+
+.pinFaviconWrap {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pinFavicon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.pinMonogram {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pinName {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.pinMenuTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: none;
+  background: color-mix(in oklab, var(--surface) 78%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.pinMenuTrigger:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.pinDragOverlay {
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  opacity: 0.96;
+  cursor: grabbing;
+}
+
+/* ── Folder chevron (inline layout) ── */
+.chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.18s ease;
+  transform: rotate(0deg);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* ── Inline bookmark rows (under an expanded folder) ── */
+.inlineList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px 14px;
+  margin-left: 17px;
+  border-left: 1px solid var(--border);
+}
+
+.inlineRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inlineRow:hover .menuWrap {
+  opacity: 1;
+}
+
+.inlineLink {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 9px;
+  text-decoration: none;
+  transition: background 0.12s;
+}
+
+.inlineRow:hover .inlineLink {
+  background: var(--surface2);
+}
+
+.inlineFaviconWrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.inlineFavicon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  position: absolute;
+  inset: 0;
+}
+
+.inlineMonogram {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.inlineName {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inlineEmpty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .folderItem {
   display: flex;
   align-items: center;
@@ -214,6 +432,7 @@
 
 .sidebarFooter {
   display: flex;
+  flex-direction: column;
   gap: 6px;
   margin-top: 8px;
 }
@@ -324,4 +543,58 @@
     text-align: center;
   }
 
+  /* Inline layout stays a vertical list on mobile — the horizontal strip above
+     is panel-mode only, and an accordion only reads correctly stacked. */
+  .sidebar.inline {
+    flex-direction: column;
+    overflow-x: visible;
+    gap: 4px;
+  }
+
+  .sidebar.inline .folderItem {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    padding: 9px 11px;
+    border-radius: 13px;
+  }
+
+  .sidebar.inline .preview { display: grid; }
+
+  .sidebar.inline .folderText {
+    display: block;
+    flex: 1;
+  }
+
+  .sidebar.inline .folderNameRow {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  .sidebar.inline .folderName {
+    font-size: 14px;
+    text-align: left;
+  }
+
+  /* No hover on touch — keep the ··· menus visible and tappable. */
+  .sidebar.inline .menuWrap {
+    display: block;
+    opacity: 1;
+  }
+
+  .sidebar.inline .sidebarFooter {
+    flex-direction: column;
+    margin-top: 8px;
+  }
+
+  .sidebar.inline .newFolder {
+    flex-direction: row;
+    min-height: 42px;
+    padding: 9px 11px;
+    font-size: 13px;
+    justify-content: flex-start;
+    text-align: left;
+  }
 }

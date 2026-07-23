@@ -28,11 +28,12 @@ interface Props {
   onEditBookmark: (b: Bookmark) => void;
   onDeleteBookmark: (id: string) => void;
   onVisit: (id: string) => void;
+  onPin?: (id: string) => void;
   bookmarkOpenMode?: 'same-tab' | 'new-tab';
 }
 
 export default function BookmarksGrid({
-  folder, bookmarks, tileRefs, onAddLink, onReorder, onEditBookmark, onDeleteBookmark, onVisit, bookmarkOpenMode,
+  folder, bookmarks, tileRefs, onAddLink, onReorder, onEditBookmark, onDeleteBookmark, onVisit, onPin, bookmarkOpenMode,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -83,6 +84,7 @@ export default function BookmarksGrid({
                   onEdit={onEditBookmark}
                   onDelete={onDeleteBookmark}
                   onVisit={onVisit}
+                  onPin={onPin}
                   openMode={bookmarkOpenMode}
                 />
               </div>

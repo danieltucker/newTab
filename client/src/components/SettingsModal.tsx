@@ -396,6 +396,26 @@ export default function SettingsModal({ settings, onUpdate, onClose, onImport, i
                 </div>
 
                 <div className={styles.sectionBlock}>
+                  <div className={styles.row}>
+                    <div>
+                      <div className={styles.rowLabel}>Bookmark layout</div>
+                      <div className={styles.rowHint}>Panel shows a folder’s bookmarks in the grid on the right. Inline expands folders in the sidebar, Arc-style.</div>
+                    </div>
+                    <div className={styles.themePicker}>
+                      {(['panel', 'inline'] as const).map(l => (
+                        <button
+                          key={l}
+                          className={`${styles.themeOption} ${(settings.bookmarkLayout ?? 'panel') === l ? styles.themeOptionActive : ''}`}
+                          onClick={() => onUpdate({ bookmarkLayout: l })}
+                        >
+                          {l === 'panel' ? 'Panel' : 'Inline'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.sectionBlock}>
                   <div className={styles.blockTitle}>Background</div>
                   <div className={styles.gradientGrid}>
                     {([
