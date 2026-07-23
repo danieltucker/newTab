@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import styles from './AddLinkModal.module.css';
 import ownStyles from './EditBookmarkModal.module.css';
 import { Folder, Bookmark } from '../types';
-import { parseDomain, deriveName, deriveColor, faviconUrl } from '../utils/color';
+import { parseDomain, parseLink, deriveName, deriveColor, faviconUrl } from '../utils/color';
 
 const PALETTE = [
   '#5E6AD2', '#FF4500', '#EA4C89', '#1DB954', '#F48024', '#A259FF',
@@ -31,20 +31,24 @@ export default function EditBookmarkModal({ bookmark, folders, onSave, onDelete,
   // Track the domain that was current when the modal opened (or last auto-derived)
   const prevDomainRef = useRef(parseDomain(bookmark.domain) || bookmark.domain);
 
-  const domain = parseDomain(url);
-  const autoColor = domain ? deriveColor(domain) : bookmark.color;
+  // domain = the full link that gets saved / navigated to (may include a path,
+  // e.g. github.com/danieltucker); host = just the site, for favicon/name/colour.
+  const domain = parseLink(url);
+  const host = parseDomain(url);
+  const autoColor = host ? deriveColor(host) : bookmark.color;
   const color = colorOverride ?? bookmark.color;
-  const favicon = domain ? faviconUrl(domain) : null;
+  const favicon = host ? faviconUrl(host) : null;
 
-  // Auto-derive name only when domain changes from what we had before
+  // Auto-derive name only when the host changes — editing just the path leaves
+  // the name alone.
   useEffect(() => {
     setFaviconFailed(false);
-    if (!domain) return;
-    if (!nameEdited && domain !== prevDomainRef.current) {
-      setNameOverride(deriveName(domain));
-      prevDomainRef.current = domain;
+    if (!host) return;
+    if (!nameEdited && host !== prevDomainRef.current) {
+      setNameOverride(deriveName(host));
+      prevDomainRef.current = host;
     }
-  }, [domain]);
+  }, [host]);
 
   function handleBackdrop(e: React.MouseEvent) {
     if (e.target === e.currentTarget) onClose();
@@ -56,7 +60,7 @@ export default function EditBookmarkModal({ bookmark, folders, onSave, onDelete,
     try {
       await onSave(bookmark.id, {
         domain,
-        name: nameOverride.trim() || domain,
+        name: nameOverride.trim() || host || domain,
         faviconUrl: favicon || '',
         color: colorOverride ?? autoColor,
         folderId: selectedFolderId,

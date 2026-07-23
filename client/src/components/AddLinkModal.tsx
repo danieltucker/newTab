@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './AddLinkModal.module.css';
 import { Folder } from '../types';
-import { parseDomain, deriveName, deriveColor, faviconUrl } from '../utils/color';
+import { parseDomain, parseLink, deriveName, deriveColor, faviconUrl } from '../utils/color';
 
 interface Props {
   folders: Folder[];
@@ -21,20 +21,23 @@ export default function AddLinkModal({ folders, defaultFolderId, defaultUrl, onA
 
   const prevDomainRef = useRef<string | null>(null);
 
-  const domain = parseDomain(url);
-  const derivedName = domain ? deriveName(domain) : null;
-  const color = domain ? deriveColor(domain) : null;
-  const favicon = domain ? faviconUrl(domain) : null;
+  // domain = the full link that gets saved / navigated to (may include a path,
+  // e.g. github.com/danieltucker); host = just the site, for favicon/name/colour.
+  const domain = parseLink(url);
+  const host = parseDomain(url);
+  const derivedName = host ? deriveName(host) : null;
+  const color = host ? deriveColor(host) : null;
+  const favicon = host ? faviconUrl(host) : null;
 
-  // Auto-fill name when domain changes, unless user has manually edited it
+  // Auto-fill name when the host changes, unless the user has edited it
   useEffect(() => {
     setFaviconFailed(false);
-    if (!domain) return;
-    if (!nameEdited && domain !== prevDomainRef.current && derivedName) {
+    if (!host) return;
+    if (!nameEdited && host !== prevDomainRef.current && derivedName) {
       setNameOverride(derivedName);
-      prevDomainRef.current = domain;
+      prevDomainRef.current = host;
     }
-  }, [domain]);
+  }, [host]);
 
   const displayName = nameOverride || derivedName || '';
 
@@ -49,7 +52,7 @@ export default function AddLinkModal({ folders, defaultFolderId, defaultUrl, onA
       await onAdd({
         folderId: selectedFolderId,
         domain,
-        name: displayName || domain,
+        name: displayName || host || domain,
         faviconUrl: favicon || '',
         color,
       });
