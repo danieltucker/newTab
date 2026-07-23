@@ -333,6 +333,199 @@
 .treeItem:hover .treeDelete { opacity: 0.6; }
 .treeDelete:hover { opacity: 1; background: #fdeaea; color: #e44; }
 
+/* ── Folders ── */
+.treeHeadBtns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folderGroup {
+  position: relative;
+}
+
+.folderDragging {
+  opacity: 0.55;
+}
+
+/* The copy that rides the cursor in the DragOverlay — lifted off the tree */
+.dragOverlayItem {
+  background: #ffffff;
+  border: 1px solid #e6e7ec;
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgba(20, 22, 30, 0.18);
+  cursor: grabbing;
+}
+
+.folderHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  touch-action: none;   /* pointer sensor owns the drag gesture on the header */
+  transition: background 0.1s, box-shadow 0.1s;
+}
+
+.folderHead:hover { background: #eef0f4; }
+
+.folderIcon { flex-shrink: 0; }
+
+.folderName {
+  flex: 1;
+  min-width: 0;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2b2f3a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folderCount {
+  font-size: 10px;
+  font-weight: 600;
+  color: #b5bac6;
+  letter-spacing: 0.04em;
+}
+
+.folderActions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.folderHead:hover .folderActions { opacity: 1; }
+
+.folderActBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: #9aa0b0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.folderActBtn:hover { background: #e7e9ef; color: #5b5be6; }
+
+/* Folder highlighted while a note is being dragged into it (projected parent) */
+.folderDropActive {
+  background: #ecebfd;
+  box-shadow: inset 0 0 0 1.5px #c9c9f5;
+}
+
+/* A note that belongs to a folder: indented, with a guide line up to its header */
+.treeItemNested {
+  margin-left: 19px;
+  border-left: 1px solid #ebedf1;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* ── Folder edit popover ── */
+.folderPopover {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 100%;
+  z-index: calc(var(--z-top) + 1);
+  margin-top: 2px;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #e6e7ec;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(20, 22, 30, 0.18);
+  animation: popIn 0.1s ease;
+}
+
+.folderNameInput {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid #e0e2e9;
+  border-radius: 7px;
+  background: #ffffff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: #2b2f3a;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.folderNameInput:focus {
+  border-color: #c9c9f5;
+  box-shadow: 0 0 0 3px rgba(91, 91, 230, 0.09);
+}
+
+.folderSwatchRow {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.folderSwatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.folderSwatch:hover { transform: scale(1.12); }
+
+.folderSwatchSel {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px #5b5be6;
+}
+
+.folderPopActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.folderDeleteBtn {
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  color: #d64545;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.folderDeleteBtn:hover { background: #fdeaea; }
+.folderDeleteBtnArmed { border-color: #f3cdcd; background: #fdeaea; font-weight: 600; }
+
+.folderDoneBtn {
+  padding: 5px 14px;
+  border: 1px solid #5b5be6;
+  border-radius: 7px;
+  background: #5b5be6;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.folderDoneBtn:hover { background: #4a4ad8; border-color: #4a4ad8; }
+
 /* ── Document pane ── */
 .docPane {
   display: flex;

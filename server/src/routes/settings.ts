@@ -13,7 +13,9 @@ export interface UserSettings {
   weatherLocation: string;
   weatherUnit: 'celsius' | 'fahrenheit';
   notes: string;
-  noteDocs: Array<{ id: string; title: string; body: string; updatedAt?: number; deletedAt?: number }>;
+  noteDocs: Array<{ id: string; title: string; body: string; updatedAt?: number; deletedAt?: number; folderId?: string }>;
+  noteFolders: Array<{ id: string; name: string; color: string }>;
+  noteTreeOrder: string[];
   clockFormat: '12h' | '24h';
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
@@ -44,6 +46,8 @@ const DEFAULTS: UserSettings = {
   weatherUnit: 'celsius',
   notes: '',
   noteDocs: [],
+  noteFolders: [],
+  noteTreeOrder: [],
   clockFormat: '12h',
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',
@@ -85,7 +89,7 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
 });
 
 router.patch('/', async (req: AuthRequest, res: Response): Promise<void> => {
-  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'bookmarkLayout', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll', 'commentsShowPublic', 'commentsDefaultPublic', 'commentsSort', 'commentsAutoExpand']);
+  const allowed = new Set(['searchEngine', 'searchNewTab', 'theme', 'consoleEnabled', 'weatherLocation', 'weatherUnit', 'notes', 'noteDocs', 'noteFolders', 'noteTreeOrder', 'clockFormat', 'articleOpenMode', 'readingListOpenMode', 'bookmarkOpenMode', 'bookmarkLayout', 'backgroundGradient', 'activeWidgets', 'worldClockZones', 'rssFeedUrls', 'rssFeedPageSize', 'rssLayout', 'readingListLayout', 'rssEnabled', 'saveArticleMode', 'markReadOnScroll', 'commentsShowPublic', 'commentsDefaultPublic', 'commentsSort', 'commentsAutoExpand']);
   const incoming = req.body as Record<string, unknown>;
 
   // Validate keys

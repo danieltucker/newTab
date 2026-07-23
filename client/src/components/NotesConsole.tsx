@@ -1,15 +1,27 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
+  DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors,
+  DragStartEvent, DragMoveEvent, DragOverEvent, DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+  SortableContext, verticalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import styles from './NotesConsole.module.css';
 import RichEditor from './RichEditor';
-import { NoteDoc } from '../hooks/useSettings';
+import { NoteDoc, NoteFolder } from '../hooks/useSettings';
 import { noteText, noteSnippet } from '../utils/noteText';
+import {
+  INDENT, isFolderId, folderIdOf, sameOrder, buildRows, getProjection, computeDrop, reconcileFlat,
+} from '../utils/noteTree';
+
+// Same swatch set the bookmark folders use, so a folder color means the same
+// thing everywhere in the app (see EditFolderModal).
+const PALETTE = [
+  '#5E6AD2', '#FF4500', '#EA4C89', '#1DB954', '#F48024', '#A259FF',
+  '#E0479E', '#00A8E8', '#FF6600', '#24A0ED', '#7C5CFC', '#0FB57B',
+];
 
 function uid(): string {
   return (crypto as any)?.randomUUID?.() ?? `n_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -148,6 +160,26 @@ const ChevronIcon = ({ open }: { open: boolean }) => (
   </svg>
 );
 
+// Filled with the folder's own color so the tree reads at a glance.
+const FolderIcon = ({ color }: { color: string }) => (
+  <svg className={styles.folderIcon} width="14" height="14" viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth="1.5" strokeLinejoin="round">
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);
+
+const GearIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+    <path d="M7 2v10M2 7h10" />
+  </svg>
+);
+
 function DeleteBtn({ id, onDelete }: { id: string; onDelete: (id: string) => void }) {
   return (
     <button
@@ -224,13 +256,13 @@ function TrashRow({ doc, active, onSelect, onRestore, onPurge }: {
   );
 }
 
-function SortableNote({ doc, active, onSelect, onDelete }: NoteRowProps) {
+function SortableNote({ doc, active, indent, onSelect, onDelete }: NoteRowProps & { indent?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: doc.id });
   return (
     <div
       ref={setNodeRef}
-      className={`${styles.treeItem} ${active ? styles.treeItemActive : ''} ${isDragging ? styles.treeItemDragging : ''}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`${styles.treeItem} ${indent ? styles.treeItemNested : ''} ${active ? styles.treeItemActive : ''} ${isDragging ? styles.treeItemDragging : ''}`}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       onClick={() => onSelect(doc.id)}
       {...attributes}
       {...listeners}
@@ -244,10 +276,160 @@ function SortableNote({ doc, active, onSelect, onDelete }: NoteRowProps) {
   );
 }
 
+// The rename/recolor/delete card that drops under a folder header. Kept inside
+// the tree so it never leaves the console; closes on outside click or Escape.
+function FolderPopover({ folder, onRename, onRecolor, onDelete, onClose }: {
+  folder: NoteFolder;
+  onRename: (name: string) => void;
+  onRecolor: (color: string) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(folder.name);
+  const [armDelete, setArmDelete] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+
+  // Commit the name before closing on any outside interaction.
+  useEffect(() => {
+    function onDown(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) { onRename(name.trim() || 'Folder'); onClose(); }
+    }
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [name, onRename, onClose]);
+
+  return (
+    <div className={styles.folderPopover} ref={ref} onClick={e => e.stopPropagation()}>
+      <input
+        ref={inputRef}
+        className={styles.folderNameInput}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { onRename(name.trim() || 'Folder'); onClose(); }
+          if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+        }}
+        placeholder="Folder name"
+        spellCheck={false}
+        aria-label="Folder name"
+      />
+      <div className={styles.folderSwatchRow}>
+        {PALETTE.map(c => (
+          <button
+            key={c}
+            className={`${styles.folderSwatch} ${c === folder.color ? styles.folderSwatchSel : ''}`}
+            style={{ background: c }}
+            onClick={() => onRecolor(c)}
+            title={c}
+            aria-label={`Set color ${c}`}
+          />
+        ))}
+      </div>
+      <div className={styles.folderPopActions}>
+        <button
+          className={`${styles.folderDeleteBtn} ${armDelete ? styles.folderDeleteBtnArmed : ''}`}
+          onClick={() => { if (!armDelete) { setArmDelete(true); return; } onDelete(); }}
+        >
+          {armDelete ? 'Delete folder?' : 'Delete folder'}
+        </button>
+        <button
+          className={styles.folderDoneBtn}
+          onClick={() => { onRename(name.trim() || 'Folder'); onClose(); }}
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface FolderRowProps {
+  folder: NoteFolder;
+  count: number;           // notes in this folder
+  open: boolean;
+  editing: boolean;
+  dropTarget: boolean;     // a note is being dragged into this folder right now
+  onToggle: () => void;
+  onAddNote: () => void;
+  onOpenEdit: () => void;
+  onRename: (name: string) => void;
+  onRecolor: (color: string) => void;
+  onDeleteFolder: () => void;
+  onCloseEdit: () => void;
+}
+
+// A single flat, sortable folder-header row. Its notes are separate rows in the
+// same list (indented), not children here — that's what makes the whole tree one
+// uniform sortable surface.
+function SortableFolderRow({
+  folder, count, open, editing, dropTarget,
+  onToggle, onAddNote, onOpenEdit, onRename, onRecolor, onDeleteFolder, onCloseEdit,
+}: FolderRowProps) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: `folder:${folder.id}` });
+  return (
+    <div
+      className={styles.folderGroup}
+      ref={setNodeRef}
+      // Translate only — CSS.Transform would add the strategy's scaleY, which
+      // stretches a folder to the height of whatever it's swapping with.
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+    >
+      <div
+        className={`${styles.folderHead} ${isDragging ? styles.folderDragging : ''} ${dropTarget ? styles.folderDropActive : ''}`}
+        onClick={onToggle}
+        {...attributes}
+        {...listeners}
+      >
+        <ChevronIcon open={open} />
+        <FolderIcon color={folder.color} />
+        <span className={styles.folderName}>{folder.name.trim() || 'Folder'}</span>
+        <span className={styles.folderCount}>{count}</span>
+        <span className={styles.folderActions}>
+          <button
+            className={styles.folderActBtn}
+            onClick={e => { e.stopPropagation(); onAddNote(); }}
+            onPointerDown={e => e.stopPropagation()}
+            title="New note in folder"
+            aria-label="New note in folder"
+          >
+            <PlusIcon />
+          </button>
+          <button
+            className={styles.folderActBtn}
+            onClick={e => { e.stopPropagation(); onOpenEdit(); }}
+            onPointerDown={e => e.stopPropagation()}
+            title="Edit folder"
+            aria-label="Edit folder"
+          >
+            <GearIcon />
+          </button>
+        </span>
+      </div>
+
+      {editing && (
+        <FolderPopover
+          folder={folder}
+          onRename={onRename}
+          onRecolor={onRecolor}
+          onDelete={onDeleteFolder}
+          onClose={onCloseEdit}
+        />
+      )}
+    </div>
+  );
+}
+
 interface Props {
   docs: NoteDoc[];
+  folders: NoteFolder[];
+  order: string[];          // top-level tree order (folder / ungrouped-note tokens)
   legacyNotes: string;      // old settings.notes, migrated on first use
-  onSave: (docs: NoteDoc[]) => Promise<unknown> | void;
+  onSave: (docs: NoteDoc[], folders: NoteFolder[], order: string[]) => Promise<unknown> | void;
   initialNoteId?: string;   // opened from a search hit in the main search bar
   initialQuery?: string;    // …and the term that found it, seeded into the filter
   closing?: boolean;
@@ -255,7 +437,8 @@ interface Props {
 }
 
 export default function NotesConsole({
-  docs, legacyNotes, onSave, initialNoteId, initialQuery = '', closing = false, onClose,
+  docs, folders: foldersProp, order: orderProp, legacyNotes, onSave,
+  initialNoteId, initialQuery = '', closing = false, onClose,
 }: Props) {
   // Seed the working set once: existing docs → migrate legacy note → a blank
   // note. Anything that has outstayed its 15 days in Recently Deleted is purged
@@ -277,6 +460,29 @@ export default function NotesConsole({
   // re-rendering, so typing never churns React); `list` mirrors it for the tree.
   const docsRef = useRef<NoteDoc[]>(initial);
   const [list, setList] = useState<NoteDoc[]>(initial);
+  // Folders mirror the same pattern: a ref for the save channel, state for render.
+  const foldersRef = useRef<NoteFolder[]>(foldersProp ?? []);
+  const [folders, setFolders] = useState<NoteFolder[]>(foldersProp ?? []);
+  // The whole tree as one flat, ordered token list (folder headers + every note,
+  // each folder's notes contiguous after it). Seeded from the stored order.
+  const [flat, setFlat] = useState<string[]>(
+    () => reconcileFlat(orderProp ?? [], foldersProp ?? [], initial.filter(d => !d.deletedAt)),
+  );
+  const flatRef = useRef<string[]>(flat);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set((foldersProp ?? []).map(f => f.id)));
+  const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  // Live drag state: which row is moving, and where it currently projects to
+  // (depth + the folder it would join) so the overlay and folder highlight can
+  // reflect it. `offsetLeftRef` is the horizontal drag distance that drives depth.
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [projected, setProjected] = useState<{ depth: 0 | 1; parentId: string | null } | null>(null);
+  const offsetLeftRef = useRef(0);
+  const overIdRef = useRef<string | null>(null);
+  const [dragItem, setDragItem] = useState<
+    | { kind: 'note'; title: string }
+    | { kind: 'folder'; folder: NoteFolder }
+    | null
+  >(null);
   const [activeId, setActiveId] = useState<string>(
     () => (initialNoteId && initial.some(d => d.id === initialNoteId)
       ? initialNoteId
@@ -300,7 +506,7 @@ export default function NotesConsole({
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     if (!dirtyRef.current) return;
     dirtyRef.current = false;
-    Promise.resolve(onSave(docsRef.current)).then(() => {
+    Promise.resolve(onSave(docsRef.current, foldersRef.current, flatRef.current)).then(() => {
       setSaved(true);
       setTimeout(() => setSaved(false), 1400);
     }).catch(() => {});
@@ -311,6 +517,13 @@ export default function NotesConsole({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flush, 700);
   }, [flush]);
+
+  // Sets both the render state and the save-channel ref together.
+  const commitFlat = useCallback((next: string[]) => {
+    flatRef.current = next;
+    setFlat(next);
+    scheduleSave();
+  }, [scheduleSave]);
 
   // The seed was rebuilt against stored notes (legacy migration or an expiry
   // purge) — write it back so what's stored matches what's on screen. A first
@@ -348,6 +561,31 @@ export default function NotesConsole({
     [list]
   );
 
+  const folderIdSet = useMemo(() => new Set(folders.map(f => f.id)), [folders]);
+  const notesById = useMemo(() => new Map(liveDocs.map(d => [d.id, d])), [liveDocs]);
+  const folderNoteCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of liveDocs) if (d.folderId && folderIdSet.has(d.folderId)) m.set(d.folderId, (m.get(d.folderId) ?? 0) + 1);
+    return m;
+  }, [liveDocs, folderIdSet]);
+
+  // Keep the flat order in step with what exists — new folders/notes get a slot,
+  // deleted ones lose theirs, folder blocks stay contiguous — without disturbing
+  // the saved arrangement.
+  useEffect(() => {
+    const next = reconcileFlat(flatRef.current, folders, liveDocs);
+    if (!sameOrder(next, flatRef.current)) { flatRef.current = next; setFlat(next); }
+  }, [folders, liveDocs]);
+
+  // The visible rows: hide the actively-dragged folder's children so it moves as
+  // one block.
+  const draggingFolderId = activeDragId && isFolderId(activeDragId) ? folderIdOf(activeDragId) : undefined;
+  const rows = useMemo(
+    () => buildRows(flat, folderIdSet, notesById, openFolders, draggingFolderId),
+    [flat, folderIdSet, notesById, openFolders, draggingFolderId],
+  );
+  const rowIds = useMemo(() => rows.map(r => r.id), [rows]);
+
   // Search the tree by title and body text. Body edits are written straight to
   // the doc objects (no re-render), so this recomputes off the live text every
   // time the query changes.
@@ -381,7 +619,7 @@ export default function NotesConsole({
     setList(docsRef.current);
     setActiveId(doc.id);
     setQuery('');   // an empty new note would be hidden by an active filter
-    scheduleSave();
+    commitFlat([doc.id, ...flatRef.current.filter(t => t !== doc.id)]);   // new loose note on top
   }
 
   // Commit a new working set, keeping one live note around and moving off a
@@ -423,15 +661,122 @@ export default function NotesConsole({
     setActiveId(id);
   }
 
+  // ── Folders ──────────────────────────────────────────────────────────
+  function commitFolders(next: NoteFolder[]) {
+    foldersRef.current = next;
+    setFolders(next);
+    scheduleSave();
+  }
+
+  function toggleFolder(id: string) {
+    setOpenFolders(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  function addFolder() {
+    const f: NoteFolder = { id: uid(), name: 'New folder', color: PALETTE[0] };
+    commitFolders([...foldersRef.current, f]);
+    setOpenFolders(prev => new Set(prev).add(f.id));
+    setEditingFolder(f.id);   // open the rename popover straight away
+    setQuery('');
+  }
+
+  function renameFolder(id: string, name: string) {
+    commitFolders(foldersRef.current.map(f => f.id === id ? { ...f, name } : f));
+  }
+
+  function recolorFolder(id: string, color: string) {
+    commitFolders(foldersRef.current.map(f => f.id === id ? { ...f, color } : f));
+  }
+
+  // Deleting a folder keeps its notes — they fall back to loose, sitting where
+  // the folder was (reconcile turns the orphaned children into top-level notes).
+  function deleteFolder(id: string) {
+    docsRef.current = docsRef.current.map(d => d.folderId === id ? { ...d, folderId: undefined } : d);
+    setList(docsRef.current);
+    setEditingFolder(null);
+    commitFolders(foldersRef.current.filter(f => f.id !== id));
+  }
+
+  function addNoteToFolder(fid: string) {
+    const doc: NoteDoc = { ...blankNote(), folderId: fid };
+    docsRef.current = [doc, ...docsRef.current];
+    setList(docsRef.current);
+    setActiveId(doc.id);
+    setQuery('');
+    setOpenFolders(prev => new Set(prev).add(fid));
+    // Slot the new note right after its folder header.
+    const header = `folder:${fid}`;
+    const at = flatRef.current.indexOf(header);
+    const next = flatRef.current.filter(t => t !== doc.id);
+    next.splice(at < 0 ? next.length : at + 1, 0, doc.id);
+    commitFlat(next);
+  }
+
+  // ── Drag ─────────────────────────────────────────────────────────────
+  // Recompute where the dragged row projects to, for live overlay/highlight.
+  const refreshProjection = useCallback(() => {
+    const activeId = activeDragId, overId = overIdRef.current;
+    if (!activeId || !overId) { setProjected(null); return; }
+    const p = getProjection(rows, activeId, overId, offsetLeftRef.current);
+    setProjected(p ? { depth: p.depth, parentId: p.parentId } : null);
+  }, [activeDragId, rows]);
+
+  function handleDragStart(e: DragStartEvent) {
+    const id = String(e.active.id);
+    offsetLeftRef.current = 0;
+    overIdRef.current = id;
+    setActiveDragId(id);
+    if (isFolderId(id)) {
+      const f = foldersRef.current.find(f => `folder:${f.id}` === id);
+      if (f) setDragItem({ kind: 'folder', folder: f });
+    } else {
+      const d = docsRef.current.find(d => d.id === id);
+      setDragItem({ kind: 'note', title: d?.title?.trim() || 'Untitled' });
+    }
+  }
+
+  function handleDragOver(e: DragOverEvent) {
+    overIdRef.current = e.over ? String(e.over.id) : null;
+    refreshProjection();
+  }
+
+  function handleDragMove(e: DragMoveEvent) {
+    offsetLeftRef.current = e.delta.x;
+    refreshProjection();
+  }
+
+  function clearDrag() {
+    setActiveDragId(null);
+    setProjected(null);
+    setDragItem(null);
+    overIdRef.current = null;
+    offsetLeftRef.current = 0;
+  }
+
   function handleDragEnd(e: DragEndEvent) {
     const { active: a, over } = e;
-    if (!over || a.id === over.id) return;
-    const oldIndex = docsRef.current.findIndex(d => d.id === a.id);
-    const newIndex = docsRef.current.findIndex(d => d.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    docsRef.current = arrayMove(docsRef.current, oldIndex, newIndex);
-    setList(docsRef.current);
-    scheduleSave();
+    const dragId = String(a.id);
+    const overId = over ? String(over.id) : null;
+    // Rows exclude the dragged folder's children, matching what getProjection saw.
+    const rowsNow = buildRows(flatRef.current, folderIdSet, notesById, openFolders, draggingFolderId);
+    const offset = offsetLeftRef.current;
+    clearDrag();
+    if (!overId) return;
+
+    const result = computeDrop(flatRef.current, rowsNow, notesById, folderIdSet, dragId, overId, offset);
+    if (!result) return;
+
+    if (result.noteId) {
+      docsRef.current = docsRef.current.map(d =>
+        d.id === result.noteId ? { ...d, folderId: result.newFolderId } : d);
+      setList(docsRef.current);
+      if (result.openFolder) setOpenFolders(prev => new Set(prev).add(result.openFolder!));
+    }
+    commitFlat(result.flat);
   }
 
   return (
@@ -467,11 +812,19 @@ export default function NotesConsole({
                 <span className={styles.treeLabel}>
                   {q ? `${results.length} match${results.length === 1 ? '' : 'es'}` : 'All notes'}
                 </span>
-                <button className={styles.addBtn} onClick={addNote} title="New note" aria-label="New note">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                    <path d="M7 2v10M2 7h10" />
-                  </svg>
-                </button>
+                <span className={styles.treeHeadBtns}>
+                  <button className={styles.addBtn} onClick={addFolder} title="New folder" aria-label="New folder">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <path d="M12 11v4M10 13h4" />
+                    </svg>
+                  </button>
+                  <button className={styles.addBtn} onClick={addNote} title="New note" aria-label="New note">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                      <path d="M7 2v10M2 7h10" />
+                    </svg>
+                  </button>
+                </span>
               </div>
 
               <div className={styles.searchWrap}>
@@ -515,18 +868,77 @@ export default function NotesConsole({
                         />
                       ))
                 ) : (
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={liveDocs.map(d => d.id)} strategy={verticalListSortingStrategy}>
-                      {liveDocs.map(d => (
-                        <SortableNote
-                          key={d.id}
-                          doc={d}
-                          active={d.id === activeId}
-                          onSelect={selectNote}
-                          onDelete={deleteNote}
-                        />
-                      ))}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCorners}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragMove={handleDragMove}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={clearDrag}
+                  >
+                    {/* One flat sortable list: folder headers and notes together. */}
+                    <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+                      {rows.map(r => {
+                        if (r.kind === 'folder') {
+                          const f = folders.find(f => f.id === r.fid)!;
+                          return (
+                            <SortableFolderRow
+                              key={r.id}
+                              folder={f}
+                              count={folderNoteCount.get(f.id) ?? 0}
+                              open={openFolders.has(f.id)}
+                              editing={editingFolder === f.id}
+                              dropTarget={projected?.parentId === f.id}
+                              onToggle={() => toggleFolder(f.id)}
+                              onAddNote={() => addNoteToFolder(f.id)}
+                              onOpenEdit={() => setEditingFolder(f.id)}
+                              onRename={name => renameFolder(f.id, name)}
+                              onRecolor={color => recolorFolder(f.id, color)}
+                              onDeleteFolder={() => deleteFolder(f.id)}
+                              onCloseEdit={() => setEditingFolder(null)}
+                            />
+                          );
+                        }
+                        const d = notesById.get(r.id);
+                        if (!d) return null;
+                        return (
+                          <SortableNote
+                            key={r.id}
+                            doc={d}
+                            active={d.id === activeId}
+                            indent={r.depth === 1}
+                            onSelect={selectNote}
+                            onDelete={deleteNote}
+                          />
+                        );
+                      })}
                     </SortableContext>
+
+                    {/* Portaled to <body> so the floating copy escapes the tree's
+                        overflow clipping and the shell's transform. Its indent
+                        previews the projected drop depth. */}
+                    {createPortal(
+                      <DragOverlay dropAnimation={null}>
+                        {dragItem?.kind === 'note' ? (
+                          <div
+                            className={`${styles.treeItem} ${styles.dragOverlayItem}`}
+                            style={{ marginLeft: (projected?.depth ?? 0) * INDENT }}
+                          >
+                            <DocIcon />
+                            <span className={styles.treeText}>
+                              <span className={styles.treeName}>{dragItem.title}</span>
+                            </span>
+                          </div>
+                        ) : dragItem?.kind === 'folder' ? (
+                          <div className={`${styles.folderHead} ${styles.dragOverlayItem}`}>
+                            <FolderIcon color={dragItem.folder.color} />
+                            <span className={styles.folderName}>{dragItem.folder.name.trim() || 'Folder'}</span>
+                          </div>
+                        ) : null}
+                      </DragOverlay>,
+                      document.body
+                    )}
                   </DndContext>
                 )}
 

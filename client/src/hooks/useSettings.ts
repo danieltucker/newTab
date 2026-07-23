@@ -12,6 +12,14 @@ export interface NoteDoc {
   body: string;      // HTML from the rich editor
   updatedAt?: number;
   deletedAt?: number;  // in Recently Deleted since this time; purged after 15 days
+  folderId?: string;   // which note folder it lives in; undefined = ungrouped
+}
+
+// One flat level of folders in the notes tree — named, colored, no nesting.
+export interface NoteFolder {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface UserSettings {
@@ -23,6 +31,10 @@ export interface UserSettings {
   weatherUnit: 'celsius' | 'fahrenheit';
   notes: string;
   noteDocs?: NoteDoc[];
+  noteFolders?: NoteFolder[];
+  // Top-level tree order: tokens are `folder:<id>` for folders and a note id for
+  // each ungrouped note, so folders and loose notes can be interleaved freely.
+  noteTreeOrder?: string[];
   clockFormat: '12h' | '24h';
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
@@ -53,6 +65,8 @@ const DEFAULTS: UserSettings = {
   weatherUnit: 'celsius',
   notes: '',
   noteDocs: [],
+  noteFolders: [],
+  noteTreeOrder: [],
   clockFormat: '12h',
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',

@@ -863,8 +863,10 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
       {showNotes && (
         <NotesConsole
           docs={settings.noteDocs ?? []}
+          folders={settings.noteFolders ?? []}
+          order={settings.noteTreeOrder ?? []}
           legacyNotes={settings.notes}
-          onSave={noteDocs => updateSetting({ noteDocs })}
+          onSave={(noteDocs, noteFolders, noteTreeOrder) => updateSetting({ noteDocs, noteFolders, noteTreeOrder })}
           initialNoteId={notesTarget?.id}
           initialQuery={notesTarget?.query}
           closing={notesFading}
