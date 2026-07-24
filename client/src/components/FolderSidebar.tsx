@@ -34,6 +34,7 @@ interface Props {
   onPinBookmark: (id: string) => void;
   onUnpinBookmark: (id: string) => void;
   onReorderPinned: (reordered: Bookmark[]) => void;
+  onReorderBookmarks: (folderId: string, reordered: Bookmark[]) => void;
   folderRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
 }
 
@@ -161,6 +162,8 @@ function SortableFolder({ folder, isActive, sites, expandable, expanded, onSelec
 }
 
 // A bookmark listed vertically under an expanded folder (inline layout).
+// Draggable within its folder — the drag listeners ride the link, so a click
+// still opens it (the 8px activation distance separates click from drag).
 function InlineBookmarkRow({ bookmark, openMode, onOpen, onEdit, onDelete, onPin }: {
   bookmark: Bookmark;
   openMode: 'same-tab' | 'new-tab';
@@ -172,14 +175,21 @@ function InlineBookmarkRow({ bookmark, openMode, onOpen, onEdit, onDelete, onPin
   const [menuOpen, setMenuOpen] = useState(false);
   const [faviconFailed, setFaviconFailed] = useState(false);
   const menuRef = useOutsideClose(menuOpen, () => setMenuOpen(false));
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: bookmark.id });
 
   return (
-    <div className={styles.inlineRow}>
+    <div
+      ref={setNodeRef}
+      className={`${styles.inlineRow} ${isDragging ? styles.inlineRowDragging : ''}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
       <a
         href={`https://${bookmark.domain}`}
         className={styles.inlineLink}
         onClick={() => onOpen(bookmark.id)}
         {...(openMode === 'new-tab' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        {...attributes}
+        {...listeners}
       >
         <span className={styles.inlineFaviconWrap}>
           <span className={styles.inlineMonogram} style={{ color: bookmark.color }}>
@@ -217,6 +227,75 @@ function InlineBookmarkRow({ bookmark, openMode, onOpen, onEdit, onDelete, onPin
         )}
       </div>
     </div>
+  );
+}
+
+// The expanded bookmark list under a folder, with its own drag context so a
+// bookmark can be reordered within its folder. It's nested inside the folder
+// sidebar's context, but the two never conflict: each sortable node carries only
+// its own context's listeners.
+function InlineBookmarkList({ folderId, sites, openMode, onReorder, onOpen, onEdit, onDelete, onPin }: {
+  folderId: string;
+  sites: Bookmark[];
+  openMode: 'same-tab' | 'new-tab';
+  onReorder: (folderId: string, reordered: Bookmark[]) => void;
+  onOpen: (id: string) => void;
+  onEdit: (b: Bookmark) => void;
+  onDelete: (id: string) => void;
+  onPin: (id: string) => void;
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  function handleDragEnd(e: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sites.findIndex(b => b.id === active.id);
+    const newIndex = sites.findIndex(b => b.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onReorder(folderId, arrayMove(sites, oldIndex, newIndex));
+  }
+
+  const activeBookmark = activeId ? sites.find(b => b.id === activeId) : null;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={(e: DragStartEvent) => setActiveId(e.active.id as string)}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveId(null)}
+    >
+      <SortableContext items={sites.map(b => b.id)} strategy={verticalListSortingStrategy}>
+        {sites.map(b => (
+          <InlineBookmarkRow
+            key={b.id}
+            bookmark={b}
+            openMode={openMode}
+            onOpen={onOpen}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onPin={onPin}
+          />
+        ))}
+      </SortableContext>
+      <DragOverlay>
+        {activeBookmark ? (
+          <div className={`${styles.inlineRow} ${styles.inlineDragOverlay}`}>
+            <span className={styles.inlineLink}>
+              <span className={styles.inlineFaviconWrap}>
+                <span className={styles.inlineMonogram} style={{ color: activeBookmark.color }}>
+                  {activeBookmark.name.charAt(0).toUpperCase()}
+                </span>
+                <img className={styles.inlineFavicon} src={faviconUrl(activeBookmark.domain)} alt="" />
+              </span>
+              <span className={styles.inlineName}>{activeBookmark.name}</span>
+            </span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
@@ -355,7 +434,8 @@ function PinGrid({ pinned, openMode, onOpen, onEdit, onDelete, onUnpin, onReorde
 export default function FolderSidebar({
   folders, activeFolderId, bookmarksByFolder, pinnedBookmarks, layout, username, bookmarkOpenMode = 'same-tab',
   onSelectFolder, onNewFolder, onNewBookmark, onEditFolder, onDeleteFolder, onMarkFolderRead, onReorderFolders,
-  onEditBookmark, onDeleteBookmark, onVisitBookmark, onPinBookmark, onUnpinBookmark, onReorderPinned, folderRefs,
+  onEditBookmark, onDeleteBookmark, onVisitBookmark, onPinBookmark, onUnpinBookmark, onReorderPinned,
+  onReorderBookmarks, folderRefs,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const isInline = layout === 'inline';
@@ -466,17 +546,16 @@ export default function FolderSidebar({
                     {sites.length === 0 ? (
                       <div className={styles.inlineEmpty}>No bookmarks</div>
                     ) : (
-                      sites.map(b => (
-                        <InlineBookmarkRow
-                          key={b.id}
-                          bookmark={b}
-                          openMode={bookmarkOpenMode}
-                          onOpen={onVisitBookmark}
-                          onEdit={onEditBookmark}
-                          onDelete={onDeleteBookmark}
-                          onPin={onPinBookmark}
-                        />
-                      ))
+                      <InlineBookmarkList
+                        folderId={folder.id}
+                        sites={sites}
+                        openMode={bookmarkOpenMode}
+                        onReorder={onReorderBookmarks}
+                        onOpen={onVisitBookmark}
+                        onEdit={onEditBookmark}
+                        onDelete={onDeleteBookmark}
+                        onPin={onPinBookmark}
+                      />
                     )}
                   </div>
                 )}

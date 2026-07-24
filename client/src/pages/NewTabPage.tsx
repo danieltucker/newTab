@@ -72,7 +72,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     }
   }, [folders, activeFolderId]);
 
-  const { bookmarks, setBookmarks, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, checkFeed, markVisited } = useBookmarks(accessToken, activeFolderId);
+  const { bookmarks, setBookmarks, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, persistBookmarkOrder, checkFeed, markVisited } = useBookmarks(accessToken, activeFolderId);
   const { items: readingList, saveItem, updateItem, archiveItem, removeItem } = useReadingList(accessToken);
 
   const CACHE_KEY = `bfc_${username}`;
@@ -223,6 +223,24 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     setNotesTarget({ id, query });
     setShowNotes(true);
   }, []);
+
+  // Only one full-screen surface at a time: opening the notes console, the
+  // command console, or the new-bookmark dialog dismisses the others.
+  useEffect(() => {
+    if (!showNotes) return;
+    setShowConsole(false); setConsoleFading(false);
+    setShowAddLink(false);
+  }, [showNotes]);
+  useEffect(() => {
+    if (!showConsole) return;
+    setShowNotes(false); setNotesFading(false); setNotesTarget(null);
+    setShowAddLink(false);
+  }, [showConsole]);
+  useEffect(() => {
+    if (!showAddLink) return;
+    setShowConsole(false); setConsoleFading(false);
+    setShowNotes(false); setNotesFading(false); setNotesTarget(null);
+  }, [showAddLink]);
 
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
@@ -440,6 +458,18 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
     await apiPut('/api/v1/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
   }
 
+  // Reorder bookmarks inside any folder (the inline sidebar can reorder a folder
+  // that isn't the active one, so this updates that folder's cache directly).
+  async function handleReorderBookmarksInFolder(folderId: string, reordered: Bookmark[]) {
+    setBookmarksByFolder(prev => {
+      const next = { ...prev, [folderId]: reordered };
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    if (folderId === activeFolderId) setBookmarks(reordered);
+    await persistBookmarkOrder(reordered);
+  }
+
   async function handleSaveFolder(id: string, updates: { name: string; color: string; feedUrls: string[] }) {
     await updateFolder(id, updates);
   }
@@ -638,6 +668,7 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
               onPinBookmark={handlePinBookmark}
               onUnpinBookmark={handleUnpinBookmark}
               onReorderPinned={handleReorderPinned}
+              onReorderBookmarks={handleReorderBookmarksInFolder}
               folderRefs={folderRefs}
             />
           </div>
@@ -865,6 +896,8 @@ export default function NewTabPage({ accessToken, username, isAdmin, themeSettin
           docs={settings.noteDocs ?? []}
           folders={settings.noteFolders ?? []}
           order={settings.noteTreeOrder ?? []}
+          sidebarWidth={settings.noteSidebarWidth ?? 210}
+          onSidebarWidth={noteSidebarWidth => updateSetting({ noteSidebarWidth })}
           legacyNotes={settings.notes}
           onSave={(noteDocs, noteFolders, noteTreeOrder) => updateSetting({ noteDocs, noteFolders, noteTreeOrder })}
           initialNoteId={notesTarget?.id}

@@ -18,6 +18,13 @@
   transform-origin: bottom center;
   will-change: transform, opacity;
   animation: shellUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: height 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Maximized: fill the overlay (viewport minus its 15px inset), so the rounded
+   border and drop shadow are kept — the console just grows to full height. */
+.shellMaximized {
+  height: 100%;
 }
 
 .shellClosing {
@@ -41,7 +48,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shell, .shellClosing { animation: none; }
+  .shell, .shellClosing { animation: none; transition: none; }
 }
 
 .console {
@@ -133,17 +140,47 @@
 .body {
   flex: 1;
   display: grid;
-  grid-template-columns: 210px 1fr;
+  grid-template-columns: var(--tree-w, 210px) 1fr;
   min-height: 0;
 }
 
 /* ── Note tree ── */
 .tree {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: #fafbfc;
   border-right: 1px solid #ebedf1;
+}
+
+/* Draggable divider on the tree's right edge — a wide invisible hit area with a
+   thin line that lights up on hover/drag. */
+.resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.resizer:hover::after,
+.resizer:active::after {
+  background: #c9c9f5;
 }
 
 .treeHead {
@@ -533,6 +570,39 @@
   min-height: 0;
   min-width: 0;
 }
+
+/* Shown until a note is selected */
+.docEmpty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #c2c6d2;
+  user-select: none;
+}
+
+.docEmptyText {
+  margin: 0;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 14px;
+  color: #9aa0b0;
+}
+
+.docEmptyBtn {
+  padding: 7px 16px;
+  border: 1px solid #e0e2e9;
+  border-radius: 8px;
+  background: #ffffff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 13px;
+  color: #5b5be6;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.docEmptyBtn:hover { background: #f4f4fe; border-color: #c9c9f5; }
 
 .docTitle {
   flex-shrink: 0;
@@ -1272,6 +1342,7 @@
     border-bottom: 1px solid #ebedf1;
     max-height: 128px;
   }
+  .resizer { display: none; }   /* tree is a top strip here, not a column */
   .docTitle { padding: 14px 18px 6px; font-size: 20px; }
   .editor { padding: 4px 18px 32px; }
 }

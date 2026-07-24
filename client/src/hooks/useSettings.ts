@@ -20,6 +20,7 @@ export interface NoteFolder {
   id: string;
   name: string;
   color: string;
+  collapsed?: boolean;   // persisted expand/collapse state
 }
 
 export interface UserSettings {
@@ -35,6 +36,7 @@ export interface UserSettings {
   // Top-level tree order: tokens are `folder:<id>` for folders and a note id for
   // each ungrouped note, so folders and loose notes can be interleaved freely.
   noteTreeOrder?: string[];
+  noteSidebarWidth?: number;   // width (px) of the notes console tree column
   clockFormat: '12h' | '24h';
   articleOpenMode: 'new-tab' | 'same-tab' | 'iframe';
   readingListOpenMode?: 'new-tab' | 'same-tab' | 'reader';
@@ -67,6 +69,7 @@ const DEFAULTS: UserSettings = {
   noteDocs: [],
   noteFolders: [],
   noteTreeOrder: [],
+  noteSidebarWidth: 210,
   clockFormat: '12h',
   articleOpenMode: 'new-tab',
   readingListOpenMode: 'new-tab',

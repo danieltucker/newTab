@@ -157,6 +157,19 @@
   align-items: center;
 }
 
+/* The row left in place while its copy rides the cursor */
+.inlineRowDragging { opacity: 0.4; }
+
+/* The floating copy shown in the DragOverlay */
+.inlineDragOverlay {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  cursor: grabbing;
+}
+.inlineDragOverlay .inlineLink { background: none; }
+
 .inlineRow:hover .menuWrap {
   opacity: 1;
 }

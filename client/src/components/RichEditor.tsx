@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './NotesConsole.module.css';
+import { getCaretPath, setCaretPath, CaretPath } from '../utils/caret';
+import { HistoryStack, EditKind } from '../utils/history';
 
 // A Confluence-style block editor. There is no separate "edit mode" — the
 // surface is always a contentEditable that renders its content live. Typing "/"
@@ -485,6 +487,52 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
   slashOpenRef.current = slashOpen;
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // ── Undo/redo ──────────────────────────────────────────────────────────
+  // Custom history: the editor's own DOM edits bypass contentEditable's native
+  // undo, so we record a pre-edit snapshot before every change and drive Ctrl+Z
+  // ourselves. `record('type')` runs on beforeinput (coalesced); command
+  // handlers call `record('struct')` before they mutate.
+  type Snap = { html: string; caret: CaretPath | null };
+  const historyRef = useRef<HistoryStack<Snap> | null>(null);
+  if (!historyRef.current) historyRef.current = new HistoryStack<Snap>();
+  const history = historyRef.current;
+
+  function snapshot(): Snap {
+    const el = ref.current!;
+    return { html: el.innerHTML, caret: getCaretPath(el) };
+  }
+  function record(kind: EditKind) {
+    if (ref.current) history.record(snapshot(), kind);
+  }
+  function restore(snap: Snap) {
+    const el = ref.current;
+    if (!el) return;
+    el.innerHTML = snap.html;
+    setCaretPath(el, snap.caret);
+    el.classList.toggle('note-empty', isBlank(el));
+    onChange(el.innerHTML);
+  }
+  function undo() {
+    if (!ref.current) return;
+    const prev = history.undoTo(snapshot());
+    if (prev) restore(prev);
+  }
+  function redo() {
+    if (!ref.current) return;
+    const next = history.redoTo(snapshot());
+    if (next) restore(next);
+  }
+
+  // Typing/paste/delete: snapshot the pre-change state (native beforeinput fires
+  // before the DOM mutates), coalesced into word-level groups.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || readOnly) return;
+    const onBeforeInput = () => record('type');
+    el.addEventListener('beforeinput', onBeforeInput);
+    return () => el.removeEventListener('beforeinput', onBeforeInput);
+  }, [readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Close the command menu when clicking anywhere outside it
   useEffect(() => {
     if (!slashOpen) return;
@@ -540,6 +588,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
 
   function execInline(command: string, value?: string) {
     ref.current?.focus();
+    record('struct');
     document.execCommand(command, false, value);
     setMarks(readMarks());
     emit();
@@ -597,6 +646,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     if (!href) return;
     const sel = restoreLinkRange();
     if (!sel) { closeLink(); return; }
+    record('struct');
     const label = form.text.trim();
 
     // Linking the selection as it stands keeps whatever formatting it holds —
@@ -621,7 +671,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
 
   function removeLink() {
     const sel = restoreLinkRange();
-    if (sel) { document.execCommand('unlink'); emit(); }
+    if (sel) { record('struct'); document.execCommand('unlink'); emit(); }
     closeLink();
   }
 
@@ -807,6 +857,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     const editor = ref.current!;
     const cell = cellAtCaret(editor);
     if (!cell) return;
+    record('struct');
     const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
     const tr = cell.parentElement as HTMLTableRowElement;
     const row = buildRow(columnCount(table), 'td');
@@ -825,6 +876,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     const editor = ref.current!;
     const cell = cellAtCaret(editor);
     if (!cell) return;
+    record('struct');
     const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
     const at = cell.cellIndex + (after ? 1 : 0);
     Array.from(table.rows).forEach(tr => {
@@ -842,6 +894,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     const editor = ref.current!;
     const cell = cellAtCaret(editor);
     if (!cell) return;
+    record('struct');
     const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
     const tr = cell.parentElement as HTMLTableRowElement;
     if (tr.parentElement === table.tHead) return; // the header row stays
@@ -857,7 +910,8 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     const cell = cellAtCaret(editor);
     if (!cell) return;
     const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
-    if (columnCount(table) <= 1) { deleteTable(); return; }
+    if (columnCount(table) <= 1) { deleteTable(); return; }   // deleteTable records
+    record('struct');
     const at = cell.cellIndex;
     Array.from(table.rows).forEach(tr => tr.cells[at]?.remove());
     const row = table.rows[0];
@@ -869,6 +923,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     const editor = ref.current!;
     const cell = cellAtCaret(editor);
     if (!cell) return;
+    record('struct');
     const table = cell.closest(`table.${TABLE_CLASS}`) as HTMLTableElement;
     let landing = table.nextElementSibling as HTMLElement | null;
     if (!landing) {
@@ -894,6 +949,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
   function applyInline(id: InlineId) {
     const editor = ref.current!;
     editor.focus();
+    if (id !== 'link') record('struct');   // the link dialog records on submit
     if (slashInfo.current) stripSlash();
     repairBlankBlock(editor);
     switch (id) {
@@ -940,6 +996,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
   function applyBlock(id: BlockId) {
     const editor = ref.current!;
     editor.focus();
+    record('struct');
     if (slashInfo.current) stripSlash();
 
     const block = repairBlankBlock(editor) ?? getBlock(editor);
@@ -1022,14 +1079,24 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
       return;
     }
 
+    // Undo/redo — driven by our own history so the editor's DOM edits (indent,
+    // to-do splits, table ops) are undoable, which native contentEditable can't.
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+      return;
+    }
+    if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
+
     const editor = ref.current!;
 
     // Inside a table: Tab walks cells, Enter stays in the cell as a line break
     // (the browser's default would split the cell into stray divs).
     const cell = cellAtCaret(editor);
     if (cell) {
-      if (e.key === 'Tab') { e.preventDefault(); moveCell(e.shiftKey ? -1 : 1); return; }
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); emit(); return; }
+      if (e.key === 'Tab') { e.preventDefault(); record('struct'); moveCell(e.shiftKey ? -1 : 1); return; }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); record('struct'); document.execCommand('insertLineBreak'); emit(); return; }
     }
 
     const block = getBlock(editor);
@@ -1040,6 +1107,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     if (e.key === 'Tab') {
       e.preventDefault();
       if (!block) return;
+      record('struct');
       if (/^(UL|OL)$/.test(block.nodeName)) {
         document.execCommand(e.shiftKey ? 'outdent' : 'indent');
         normalizeLists(editor);   // browsers nest the sub-list beside the item, not inside it
@@ -1057,6 +1125,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     if (block && block.classList.contains(TODO_CLASS)) {
       if (e.key === 'Enter') {
         e.preventDefault();
+        record('struct');
         const empty = !(block.textContent ?? '').trim();
         if (empty) {
           const p = document.createElement('p');
@@ -1070,7 +1139,22 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
           // Carry the indent across, so a nested task list keeps its shape
           const depth = block.getAttribute(INDENT_ATTR);
           if (depth) nd.setAttribute(INDENT_ATTR, depth);
-          nd.appendChild(document.createElement('br'));
+          // Split at the caret: everything from the caret to the end of the line
+          // moves down into the new to-do, so Enter mid-text pushes the tail
+          // down rather than dropping it.
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount) {
+            const caret = sel.getRangeAt(0);
+            const tail = document.createRange();
+            tail.setStart(caret.endContainer, caret.endOffset);
+            tail.setEnd(block, block.childNodes.length);
+            nd.appendChild(tail.extractContents());
+          }
+          if (!nd.firstChild || !(nd.textContent ?? '').length) {
+            while (nd.firstChild) nd.removeChild(nd.firstChild);
+            nd.appendChild(document.createElement('br'));   // caret was at the end
+          }
+          if (!block.firstChild) block.appendChild(document.createElement('br'));
           block.after(nd);
           placeCaret(nd, true);
         }
@@ -1079,6 +1163,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
       }
       if (e.key === 'Backspace' && caretAtBlockStart(block)) {
         e.preventDefault();
+        record('struct');
         const p = document.createElement('p');
         while (block.firstChild) p.appendChild(block.firstChild);
         if (!p.firstChild) p.appendChild(document.createElement('br'));
@@ -1093,6 +1178,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     // already-blank last line) exits to a fresh paragraph, like a bullet list.
     if (block && (block.nodeName === 'BLOCKQUOTE' || block.nodeName === 'PRE') && e.key === 'Enter') {
       e.preventDefault();
+      record('struct');
       if (caretAtBlockEnd(block) && currentLineEmpty()) {
         while (block.lastChild && (block.lastChild as HTMLElement).nodeName === 'BR') {
           block.removeChild(block.lastChild);
@@ -1110,13 +1196,25 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
     }
   }
 
+  // Open a link on Ctrl/Cmd-click (a plain click keeps placing the caret, so the
+  // link's text can still be edited). A middle-click (auxclick) opens it too.
+  function openLinkAt(target: HTMLElement): boolean {
+    const a = target.closest('a');
+    const href = a?.getAttribute('href');
+    if (!href || /^(javascript|data|vbscript):/i.test(href.trim())) return false;
+    window.open(href, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+
   // Toggle a to-do checkbox when its box (the left gutter) is clicked.
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
+    if ((e.metaKey || e.ctrlKey) && openLinkAt(target)) { e.preventDefault(); return; }
     const todo = target.closest(`.${TODO_CLASS}`) as HTMLElement | null;
     if (!todo) return;
     const rect = todo.getBoundingClientRect();
     if (e.clientX - rect.left <= 24) {
+      record('struct');
       const checked = todo.getAttribute('data-checked') === 'true';
       todo.setAttribute('data-checked', checked ? 'false' : 'true');
       emit();
@@ -1150,15 +1248,10 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
         <div
           ref={ref}
           className={`${styles.editor} ${styles.editorReadOnly}`}
-          // Links are live here (they aren't in an editable surface), so send
-          // them to a new tab rather than navigating the page out from under
-          // the note.
-          onClick={e => {
-            const a = (e.target as HTMLElement).closest('a');
-            if (!a?.getAttribute('href')) return;
-            e.preventDefault();
-            window.open(a.getAttribute('href')!, '_blank', 'noopener,noreferrer');
-          }}
+          // Links are live here (this surface isn't editable), so a plain click
+          // opens them in a new tab rather than navigating the page out from
+          // under the note.
+          onClick={e => { if (openLinkAt(e.target as HTMLElement)) e.preventDefault(); }}
         />
       </div>
     );
@@ -1225,6 +1318,7 @@ export default function RichEditor({ initialHtml, onChange, readOnly = false }: 
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onClick={handleClick}
+        onAuxClick={e => { if (e.button === 1 && openLinkAt(e.target as HTMLElement)) e.preventDefault(); }}
         onBlur={emit}
         data-placeholder="Type / for commands, or just start writing…"
       />

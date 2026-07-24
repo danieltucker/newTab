@@ -49,6 +49,12 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
     await apiPut('/api/v1/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
   }, []);
 
+  // Persist a new order without assuming it's the active folder — the inline
+  // sidebar can reorder any expanded folder. The caller owns the display state.
+  const persistBookmarkOrder = useCallback(async (reordered: Bookmark[]) => {
+    await apiPut('/api/v1/bookmarks/reorder', reordered.map((b, i) => ({ id: b.id, position: i })));
+  }, []);
+
   const checkFeed = useCallback(async (id: string) => {
     const res = await apiFetch(`/api/v1/bookmarks/${id}/check-feed`, { method: 'POST' });
     if (!res.ok) return;
@@ -61,5 +67,5 @@ export function useBookmarks(accessToken: string | null, folderId: string | null
     apiFetch(`/api/v1/bookmarks/${id}/visited`, { method: 'POST' }).catch(() => {});
   }, []);
 
-  return { bookmarks, setBookmarks, loading, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, checkFeed, markVisited, reload: load };
+  return { bookmarks, setBookmarks, loading, addBookmark, updateBookmark, deleteBookmark, reorderBookmarks, persistBookmarkOrder, checkFeed, markVisited, reload: load };
 }

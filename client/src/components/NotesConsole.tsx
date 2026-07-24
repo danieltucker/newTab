@@ -356,14 +356,22 @@ interface Props {
   order: string[];          // top-level tree order (folder / ungrouped-note tokens)
   legacyNotes: string;      // old settings.notes, migrated on first use
   onSave: (docs: NoteDoc[], folders: NoteFolder[], order: string[]) => Promise<unknown> | void;
+  sidebarWidth?: number;                       // persisted tree-column width
+  onSidebarWidth?: (w: number) => void;        // persist a resize
   initialNoteId?: string;   // opened from a search hit in the main search bar
   initialQuery?: string;    // …and the term that found it, seeded into the filter
   closing?: boolean;
   onClose: () => void;
 }
 
+// The tree column can be dragged between these bounds.
+const SIDEBAR_MIN = 168;
+const SIDEBAR_MAX = 460;
+const MAX_KEY = 'newt:notesMaximized';
+
 export default function NotesConsole({
   docs, folders: foldersProp, order: orderProp, legacyNotes, onSave,
+  sidebarWidth: sidebarWidthProp = 210, onSidebarWidth,
   initialNoteId, initialQuery = '', closing = false, onClose,
 }: Props) {
   // Seed the working set once: existing docs → migrate legacy note → a blank
@@ -395,8 +403,26 @@ export default function NotesConsole({
     () => reconcileFlat(orderProp ?? [], foldersProp ?? [], initial.filter(d => !d.deletedAt)),
   );
   const flatRef = useRef<string[]>(flat);
-  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set((foldersProp ?? []).map(f => f.id)));
+  // Expand/collapse is stored on the folder itself, so it survives a reload.
+  const openFolders = useMemo(
+    () => new Set(folders.filter(f => !f.collapsed).map(f => f.id)),
+    [folders],
+  );
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
+  const clampWidth = (w: number) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w));
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(sidebarWidthProp));
+  // Fill-the-viewport toggle. A per-device view preference, so it lives in
+  // localStorage and is remembered the next time the console is opened.
+  const [maximized, setMaximized] = useState<boolean>(() => {
+    try { return localStorage.getItem(MAX_KEY) === '1'; } catch { return false; }
+  });
+  function toggleMaximize() {
+    setMaximized(m => {
+      const next = !m;
+      try { localStorage.setItem(MAX_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  }
   // Live drag state: which row is moving, and where it currently projects to
   // (depth + the folder it would join) so the overlay and folder highlight can
   // reflect it. `offsetLeftRef` is the horizontal drag distance that drives depth.
@@ -409,10 +435,10 @@ export default function NotesConsole({
     | { kind: 'folder'; folder: NoteFolder }
     | null
   >(null);
-  const [activeId, setActiveId] = useState<string>(
-    () => (initialNoteId && initial.some(d => d.id === initialNoteId)
-      ? initialNoteId
-      : initial.find(d => !d.deletedAt)!.id)
+  // The console opens with nothing selected — the editor stays blank until a note
+  // is picked (unless it was opened straight onto a search hit).
+  const [activeId, setActiveId] = useState<string | null>(
+    () => (initialNoteId && initial.some(d => d.id === initialNoteId) ? initialNoteId : null)
   );
   const [saved, setSaved] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -478,8 +504,8 @@ export default function NotesConsole({
     return () => document.removeEventListener('keydown', onKey);
   }, [requestClose]);
 
-  const active = docsRef.current.find(d => d.id === activeId) ?? docsRef.current[0];
-  const activeTrashed = !!active.deletedAt;
+  const active = activeId ? docsRef.current.find(d => d.id === activeId) : undefined;
+  const activeTrashed = !!active?.deletedAt;
 
   const liveDocs = useMemo(() => list.filter(d => !d.deletedAt), [list]);
   const trashDocs = useMemo(
@@ -555,7 +581,8 @@ export default function NotesConsole({
     docsRef.current = next;
     setList(next);
     setArmEmpty(false);
-    if (leaving && leaving === activeId) setActiveId(next.find(d => !d.deletedAt)!.id);
+    // Leaving the open note returns to the blank state rather than jumping.
+    if (leaving && leaving === activeId) setActiveId(null);
     scheduleSave();
   }
 
@@ -578,7 +605,7 @@ export default function NotesConsole({
 
   function emptyTrash() {
     if (!armEmpty) { setArmEmpty(true); return; }
-    commit(docsRef.current.filter(d => !d.deletedAt), activeTrashed ? activeId : undefined);
+    commit(docsRef.current.filter(d => !d.deletedAt), activeTrashed ? activeId ?? undefined : undefined);
   }
 
   function selectNote(id: string) {
@@ -595,17 +622,37 @@ export default function NotesConsole({
   }
 
   function toggleFolder(id: string) {
-    setOpenFolders(prev => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
+    commitFolders(foldersRef.current.map(f => f.id === id ? { ...f, collapsed: !f.collapsed } : f));
+  }
+
+  // Ensure a folder is expanded (persisted) — used when something lands inside it.
+  function openFolder(id: string) {
+    if (foldersRef.current.some(f => f.id === id && f.collapsed)) {
+      commitFolders(foldersRef.current.map(f => f.id === id ? { ...f, collapsed: false } : f));
+    }
+  }
+
+  // Drag the divider between the tree and the editor to resize; the final width
+  // is persisted so it holds across sessions.
+  function startResize(e: React.PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarWidth;
+    const move = (ev: PointerEvent) => setSidebarWidth(clampWidth(startW + ev.clientX - startX));
+    const up = (ev: PointerEvent) => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      const w = clampWidth(startW + ev.clientX - startX);
+      setSidebarWidth(w);
+      onSidebarWidth?.(w);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
   }
 
   function addFolder() {
     const f: NoteFolder = { id: uid(), name: 'New folder', color: PALETTE[0] };
     commitFolders([...foldersRef.current, f]);
-    setOpenFolders(prev => new Set(prev).add(f.id));
     setEditingFolder(f.id);   // open the rename popover straight away
     setQuery('');
   }
@@ -633,7 +680,7 @@ export default function NotesConsole({
     setList(docsRef.current);
     setActiveId(doc.id);
     setQuery('');
-    setOpenFolders(prev => new Set(prev).add(fid));
+    openFolder(fid);
     // Slot the new note right after its folder header.
     const header = `folder:${fid}`;
     const at = flatRef.current.indexOf(header);
@@ -700,7 +747,7 @@ export default function NotesConsole({
       docsRef.current = docsRef.current.map(d =>
         d.id === result.noteId ? { ...d, folderId: result.newFolderId } : d);
       setList(docsRef.current);
-      if (result.openFolder) setOpenFolders(prev => new Set(prev).add(result.openFolder!));
+      if (result.openFolder) openFolder(result.openFolder);
     }
     commitFlat(result.flat);
   }
@@ -708,7 +755,7 @@ export default function NotesConsole({
   return (
     <div className={styles.overlay} onClick={e => { if (e.target === e.currentTarget) requestClose(); }}>
       <div
-        className={`${styles.shell} ${closing ? styles.shellClosing : ''}`}
+        className={`${styles.shell} ${closing ? styles.shellClosing : ''} ${maximized ? styles.shellMaximized : ''}`}
         onClick={e => e.stopPropagation()}
       >
         <div className={styles.console}>
@@ -723,6 +770,22 @@ export default function NotesConsole({
                 <span className={styles.dot}>·</span>
                 <kbd>esc</kbd>close
               </span>
+              <button
+                className={styles.closeBtn}
+                onClick={toggleMaximize}
+                title={maximized ? 'Restore' : 'Maximize'}
+                aria-label={maximized ? 'Restore notes' : 'Maximize notes'}
+              >
+                {maximized ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
+                  </svg>
+                )}
+              </button>
               <button className={styles.closeBtn} onClick={requestClose} title="Close">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <path d="M1 1l10 10M11 1L1 11" />
@@ -731,9 +794,17 @@ export default function NotesConsole({
             </span>
           </div>
 
-          <div className={styles.body}>
+          <div className={styles.body} style={{ '--tree-w': `${sidebarWidth}px` } as React.CSSProperties}>
             {/* ── Note tree ── */}
             <aside className={styles.tree}>
+              {/* Drag the right edge to resize the tree column */}
+              <div
+                className={styles.resizer}
+                onPointerDown={startResize}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize notes sidebar"
+              />
               <div className={styles.treeHead}>
                 <span className={styles.treeLabel}>
                   {q ? `${results.length} match${results.length === 1 ? '' : 'es'}` : 'All notes'}
@@ -918,38 +989,51 @@ export default function NotesConsole({
 
             {/* ── Editor ── */}
             <div className={styles.docPane}>
-              {activeTrashed && (
-                <div className={styles.trashBanner}>
-                  <span className={styles.trashBannerText}>
-                    In Recently deleted · {expiryLabel(active.deletedAt!).toLowerCase()}
-                  </span>
-                  <button className={styles.trashBannerBtn} onClick={() => restoreNote(active.id)}>
-                    Restore
-                  </button>
-                  <button
-                    className={`${styles.trashBannerBtn} ${styles.trashBannerBtnDanger}`}
-                    onClick={() => purgeNote(active.id)}
-                  >
-                    Delete now
-                  </button>
+              {active ? (
+                <>
+                  {activeTrashed && (
+                    <div className={styles.trashBanner}>
+                      <span className={styles.trashBannerText}>
+                        In Recently deleted · {expiryLabel(active.deletedAt!).toLowerCase()}
+                      </span>
+                      <button className={styles.trashBannerBtn} onClick={() => restoreNote(active.id)}>
+                        Restore
+                      </button>
+                      <button
+                        className={`${styles.trashBannerBtn} ${styles.trashBannerBtnDanger}`}
+                        onClick={() => purgeNote(active.id)}
+                      >
+                        Delete now
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    className={styles.docTitle}
+                    value={active.title}
+                    onChange={e => handleTitle(e.target.value)}
+                    placeholder="Untitled"
+                    spellCheck={false}
+                    readOnly={activeTrashed}
+                  />
+                  {/* The read-only surface is a different tree, so the key carries
+                      that state too — remounting is what re-renders the body. */}
+                  <RichEditor
+                    key={`${active.id}:${activeTrashed}`}
+                    initialHtml={active.body}
+                    onChange={handleBody}
+                    readOnly={activeTrashed}
+                  />
+                </>
+              ) : (
+                <div className={styles.docEmpty}>
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" /><path d="M9 13h6" /><path d="M9 17h4" />
+                  </svg>
+                  <p className={styles.docEmptyText}>Select a note to open it</p>
+                  <button className={styles.docEmptyBtn} onClick={addNote}>New note</button>
                 </div>
               )}
-              <input
-                className={styles.docTitle}
-                value={active.title}
-                onChange={e => handleTitle(e.target.value)}
-                placeholder="Untitled"
-                spellCheck={false}
-                readOnly={activeTrashed}
-              />
-              {/* The read-only surface is a different tree, so the key carries
-                  that state too — remounting is what re-renders the body. */}
-              <RichEditor
-                key={`${active.id}:${activeTrashed}`}
-                initialHtml={active.body}
-                onChange={handleBody}
-                readOnly={activeTrashed}
-              />
             </div>
           </div>
         </div>
